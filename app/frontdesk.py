@@ -169,13 +169,15 @@ def _fallback(item: dict) -> dict:
     }
 
 
-async def classify(item: dict) -> dict:
+async def classify(item: dict, mention: bool = False) -> dict:
     key = os.environ.get("DEEPSEEK_API_KEY", "")
     base = os.environ.get("FRONTDESK_LLM_BASE", "https://api.deepseek.com/v1").rstrip("/")
     model = os.environ.get("FRONTDESK_MODEL", "deepseek-v4-flash-vision-exp")
     if not key:
-        return _fallback(item)
+        return _fallback(item, mention)
     user = f"位置：{item['position']}\n内容：{item['text']}"
+    if mention:
+        user += "\n（该条 @ 了小秋）"
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
     started = time.monotonic()
     try:
@@ -219,7 +221,7 @@ async def classify(item: dict) -> dict:
             error=str(exc),
         )
         log.warning("frontdesk classify failed: %s", exc)
-        return _fallback(item)
+        return _fallback(item, mention)
 
 
 async def post_reply(
@@ -275,12 +277,13 @@ async def _replied_last_hour(pool: Any) -> int:
 
 
 def _candidate(kind: str, text: str) -> bool:
-    # 评论/楼中楼常常只有“补充/还是不行”等跟进词，交给 LLM 判断，避免规则漏掉。
+    # 只分诊两类：明确 @小秋（答疑）；命中吐槽词的疑似 bug。
+    # 主动回复仅限明确 bug，由 classify 二次确认，避免普通评论打扰用户。
     return bool(text) and len(text) >= 4 and (
-        kind in ("comment", "ccomment")
-        or bool(COMPLAINT.search(text))
-        or "@小秋" in text
+        "@小秋" in text or bool(COMPLAINT.search(text))
     )
+
+
 
 
 async def handle(pool: Any, item: dict) -> None:
@@ -296,7 +299,8 @@ async def handle(pool: Any, item: dict) -> None:
         return
     if await _replied_last_hour(pool) >= _env_int("FRONTDESK_MAX_PER_HOUR", 12):
         return
-    verdict = await classify(item)
+    mention = "@小秋" in item["text"]
+    verdict = await classify(item, mention)
     action = str(verdict.get("action") or "")
     if action != "reply":
         await _mark(pool, kind, item_id, "skipped")
@@ -306,6 +310,10 @@ async def handle(pool: Any, item: dict) -> None:
         await _mark(pool, kind, item_id, "skipped")
         return
     kind_of = str(verdict.get("kind") or "venting")
+    # 主动回复只允许 bug；非 @ 的建议/吐槽一律不回（bug/request 照常建工单）。
+    if kind_of != "bug" and not mention:
+        await _mark(pool, kind, item_id, "skipped")
+        return
     if kind_of in ("bug", "request"):
         source = {
             "post": "forum_post",
