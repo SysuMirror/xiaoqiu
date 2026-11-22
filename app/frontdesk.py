@@ -145,10 +145,8 @@ async def _trace(
     )
 
 
-def _fallback(item: dict) -> dict:
+def _fallback(item: dict, mention: bool = False) -> dict:
     text = item["text"]
-    if not COMPLAINT.search(text):
-        return {"action": "skip", "kind": "skip"}
     title = _plain(item["title"] or text, 48)
     if ACTIONABLE.search(text):
         return {
@@ -159,14 +157,16 @@ def _fallback(item: dict) -> dict:
             "severity": "normal",
             "reply": "收到，已登记，我先复现一下；有复现步骤或截图可以回我。",
         }
-    return {
-        "action": "reply",
-        "kind": "venting",
-        "title": title,
-        "summary": _plain(text, 500),
-        "severity": "low",
-        "reply": "看到了，确实挺闹心的。有具体复现步骤可以回我，我去盯一下。",
-    }
+    if mention:
+        return {
+            "action": "reply",
+            "kind": "venting",
+            "title": title,
+            "summary": _plain(text, 500),
+            "severity": "low",
+            "reply": "看到了，具体说说？有复现步骤或截图可以贴给我。",
+        }
+    return {"action": "skip", "kind": "skip"}
 
 
 async def classify(item: dict, mention: bool = False) -> dict:
