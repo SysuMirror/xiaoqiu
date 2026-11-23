@@ -92,30 +92,133 @@ def public_message(status: str, code: str) -> str:
     return ""
 
 
-async def _skein_call(path: str, payload: dict, timeout: float = 10.0) -> dict | None:
-    base = os.environ.get("SKEIN_CONTROL_URL", "http://172.17.0.1:7800").rstrip("/")
-    token = os.environ.get("SKEIN_TOKEN", "")
-    if not token:
-        return None
+def _skein_base() -> str:
+    return os.environ.get("SKEIN_CONTROL_URL", "http://172.17.0.1:7800").rstrip("/")
+
+
+def _skein_key() -> str:
+    # 助手凭证：只能建单、查自己建的单、上报留痕；拿不到主令牌的派单/审批权限。
+    return os.environ.get("SKEIN_ASSISTANT_KEY", "")
+
+
+async def _skein_post(
+    path: str, payload: dict, timeout: float = 10.0
+) -> tuple[int, dict | None]:
+    """POST 到雁阵控制面的公共 API（``/api/v1``），用助手凭证认证。
+
+    返回 (状态码, JSON 体)。网络失败记 (0, None)；没配助手凭证直接 (0, None)。
+    """
+    key = _skein_key()
+    if not key:
+        return 0, None
     try:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             response = await client.post(
-                f"{base}{path}",
+                f"{_skein_base()}{path}",
                 json=payload,
-                headers={"X-Skein-Token": token},
+                headers={"Authorization": f"Bearer {key}"},
             )
-        if response.status_code != 200:
-            log.warning("skein %s -> %s", path, response.status_code)
-            return None
-        return response.json()
-    except (httpx.HTTPError, ValueError) as exc:
+    except httpx.HTTPError as exc:
         log.warning("skein %s failed: %s", path, exc)
-        return None
+        return 0, None
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if response.status_code != 200 and response.status_code != 201:
+        # 公共 API 的错误体是 {"detail": {"code", "message"}}；只记它，不记请求头（里面是凭据）
+        detail = data.get("detail") if isinstance(data, dict) else None
+        log.warning("skein %s -> %s %s", path, response.status_code, detail)
+    return response.status_code, data if isinstance(data, dict) else None
+
+
+async def _skein_submit(payload: dict) -> dict | None:
+    """建单（``POST /api/v1/tickets``）。同一 (source, external_id) 重报是幂等的。"""
+    status, data = await _skein_post("/api/v1/tickets", payload)
+    if status in (200, 201):
+        return data
+    return None
+
+
+async def _skein_tickets() -> list[dict]:
+    """这个助手提交过的工单（最近的 200 张），用来避免同一帖重复建单。"""
+    key = _skein_key()
+    if not key:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
+            response = await client.get(
+                f"{_skein_base()}/api/v1/tickets?limit=200",
+                headers={"Authorization": f"Bearer {key}"},
+            )
+        data = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("skein list tickets failed: %s", exc)
+        return []
+    tickets = data.get("tickets") if isinstance(data, dict) else None
+    return [ticket for ticket in tickets or [] if isinstance(ticket, dict)]
+
+
+def _open_threads(tickets: list[dict]) -> dict[str, str]:
+    """在途工单按帖分组：external_id 的第一段是帖子 id，值是工单编号。
+
+    公共 API 的一个 ``(source, external_id)`` 是一次请求；同一帖的后续评论是独立请求，
+    所以在小秋这边按帖去重：一帖已在处理，后续补充不再建新单（原帖里也看得到）。
+    """
+    found: dict[str, str] = {}
+    for ticket in tickets:
+        head = str(ticket.get("external_id") or "").split(":", 1)[0]
+        if not head.isdigit():
+            continue
+        if str(ticket.get("status") or "") in ("done", "rejected", "cancelled"):
+            continue
+        if str(ticket.get("code") or ""):
+            found.setdefault(head, str(ticket["code"]))
+    return found
+
+
+async def _skein_trace(payload: dict) -> None:
+    """模型调用留痕（``POST /api/v1/llm/calls``，需部署方开启 SKEIN_API_TRACE）。"""
+    await _skein_post("/api/v1/llm/calls", payload, timeout=3.0)
+
+
+def _ticket_payload(item: dict, verdict: dict) -> dict:
+    """一条论坛内容 → 雁阵的建单请求。
+
+    ``source`` 记来源形态（帖子/评论/楼中楼），``external_id`` 是它在论坛里的坐标——
+    两者合起来是幂等键，也是状态回调用来找回原帖的依据。
+    """
+    kind = item["kind"]
+    post_id = str(item["post_id"])
+    if kind == "post":
+        external_id = post_id
+    elif kind == "comment":
+        external_id = f"{post_id}:{item['id']}"
+    else:
+        external_id = f"{post_id}:{item['pcomment_id']}:{item['id']}"
+    return {
+        "title": _plain(verdict.get("title") or item["title"], 120),
+        "description": _plain(verdict.get("summary") or item["text"], 1000),
+        "source": {
+            "post": "forum_post",
+            "comment": "forum_comment",
+            "ccomment": "forum_ccomment",
+        }[kind],
+        "external_id": external_id,
+        "requester": f"forum:{item['user_id']}",
+        "category": str(verdict.get("kind") or "bug"),
+        "severity": str(verdict.get("severity") or "normal"),
+        "labels": ["frontdesk"],
+    }
+
+
+def _ticket_code(ticket: dict | None) -> str:
+    ticket = (ticket or {}).get("ticket") or {}
+    return str(ticket.get("code") or "")
 
 
 async def _trace(
     session_id: str,
-    actor: str,
     model: str,
     prompt: str,
     response: str,
@@ -124,11 +227,10 @@ async def _trace(
     status: str = "ok",
     error: str = "",
 ) -> None:
-    await _skein_call(
-        "/internal/llm/calls",
+    # 谁产生的调用由雁阵按凭证认定，这里只报调用本身
+    await _skein_trace(
         {
             "session_id": session_id,
-            "actor": actor,
             "source": "frontdesk",
             "model": model,
             "prompt": prompt[:16000],
@@ -140,8 +242,7 @@ async def _trace(
             "latency_ms": latency_ms,
             "status": status,
             "error": error[:2000],
-        },
-        timeout=3.0,
+        }
     )
 
 
@@ -200,7 +301,6 @@ async def classify(item: dict, mention: bool = False) -> dict:
             raise ValueError("model returned non-json")
         await _trace(
             f"forum:{item['kind']}:{item['id']}",
-            f"forum:{item['user_id']}",
             model,
             user,
             content,
@@ -211,7 +311,6 @@ async def classify(item: dict, mention: bool = False) -> dict:
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         await _trace(
             f"forum:{item['kind']}:{item['id']}",
-            f"forum:{item['user_id']}",
             model,
             user,
             "",
@@ -286,7 +385,7 @@ def _candidate(kind: str, text: str) -> bool:
 
 
 
-async def handle(pool: Any, item: dict) -> None:
+async def handle(pool: Any, item: dict, open_threads: dict[str, str] | None = None) -> None:
     kind, item_id = item["kind"], int(item["id"])
     status = await _seen(pool, kind, item_id)
     if status in ("replied", "skipped"):
@@ -315,26 +414,14 @@ async def handle(pool: Any, item: dict) -> None:
         await _mark(pool, kind, item_id, "skipped")
         return
     if kind_of in ("bug", "request"):
-        source = {
-            "post": "forum_post",
-            "comment": "forum_comment",
-            "ccomment": "forum_ccomment",
-        }[kind]
-        payload = {
-            "source": source,
-            "thread_id": str(item["post_id"]),
-            "message_id": str(item_id),
-            "requester": f"forum:{item['user_id']}",
-            "title": _plain(verdict.get("title") or item["title"], 120),
-            "summary": _plain(verdict.get("summary") or item["text"], 1000),
-            "category": kind_of,
-            "severity": str(verdict.get("severity") or "normal"),
-            "visibility": "market",
-        }
-        if kind == "ccomment":
-            payload["parent_id"] = str(item["pcomment_id"])
-        ticket = await _skein_call("/internal/intake", payload)
-        code = str((ticket or {}).get("code") or "")
+        code = ""
+        if kind != "post" and open_threads is not None:
+            code = open_threads.get(str(item["post_id"]), "")
+        if not code:
+            ticket = await _skein_submit(_ticket_payload(item, verdict))
+            code = _ticket_code(ticket)
+            if code and kind != "post" and open_threads is not None:
+                open_threads[str(item["post_id"])] = code
         if code and code not in reply:
             reply = reply.rstrip() + f"（{code}）"
     parent_comment = int(item["pcomment_id"]) if kind in ("comment", "ccomment") else 0
@@ -413,9 +500,13 @@ async def one_round(pool: Any) -> None:
         }
         for row in ccomments
     ]
+    # 每轮取一次在途工单：同一帖的后续评论不再重复建单
+    open_threads: dict[str, str] = {}
+    if any(item["kind"] != "post" for item in items):
+        open_threads = _open_threads(await _skein_tickets())
     for item in items:
         try:
-            await handle(pool, item)
+            await handle(pool, item, open_threads)
         except Exception:
             log.exception("frontdesk item failed %s:%s", item["kind"], item["id"])
 

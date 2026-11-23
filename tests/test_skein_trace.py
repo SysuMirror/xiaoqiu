@@ -21,7 +21,7 @@ class FakeResponse:
 
 def make_callback(captured):
     callback = SkeinTraceCallback(
-        "http://skein.test", "token", session_id="s1", user_id="u1", source="chat"
+        "http://skein.test", "skein_at_key", session_id="s1", user_id="u1", source="chat"
     )
     callback._emit = captured.append
     return callback
@@ -41,8 +41,9 @@ def test_chat_model_call_is_reported():
     assert len(captured) == 1
     payload = captured[0]
     assert payload["session_id"] == "s1"
-    assert payload["actor"] == "u1"
     assert payload["source"] == "chat"
+    # 调用归属由雁阵按凭证认定：报文里不再带 actor
+    assert "actor" not in payload
     assert payload["model"] == "qwen-test"
     assert "帮我看看登录" in payload["prompt"]
     assert payload["response"] == "好的，先复现一下"

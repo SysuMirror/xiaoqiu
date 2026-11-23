@@ -1,7 +1,7 @@
 # docs/ 文档地图（小秋 chat + 前厅）
 
 > 本仓库 = 小秋 chat 面 + 论坛前厅。**ops 面已下线**，运维由 Skein 控制台/Agent 接管；
-> 旧 ops 文档仅作历史参考，不再维护。交接先读 `../skein/HANDOVER.md`。
+> 旧 ops 文档仅作历史参考，不再维护。与雁阵的接口见 Skein 仓 `docs/assistants.md`。
 
 | 文档 | 内容 |
 |---|---|
