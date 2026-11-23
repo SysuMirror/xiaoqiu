@@ -1,0 +1,27 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+var/
+server.log
+
+# qdockd 编译产物（deploy.sh 可重建，不入库）
+agent-runtime/bin/
+
+# archify 管线工作文件不跟踪，仅保留最终交付 HTML
+.archify/*
+!.archify/architecture-*
+!.archify/sequence-*
+.archify/architecture-*/*
+.archify/sequence-*/*
+!.archify/architecture-*/*.html
+!.archify/sequence-*/*.html
+
+evals/evals-reports/
+
+# 依赖与构建产物（历史曾误提交，已清理）
+node_modules/
+dist/

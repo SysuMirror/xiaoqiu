@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>小秋 Ops · 拓扑观测台（预览）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #222221;
+    --ink-1: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hairline: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+    --blue: #3987e5;          /* 健康流量（分类槽1/序列400） */
+    --blue-deep: #256abf;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;       /* 错误率升高 */
+    --critical: #d03b3b;
+    --gray-off: #898781;      /* 未启用 */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--page); color: var(--ink-1);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 14px; padding: 20px;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; }
+
+  /* ---------- 顶栏 ---------- */
+  header { display: flex; align-items: center; gap: 12px; padding: 6px 2px 14px; }
+  header h1 { font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+  .chip {
+    font-size: 12px; color: var(--ink-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px; background: var(--surface);
+  }
+  .chip b { color: var(--ink-1); font-weight: 600; }
+  .spacer { flex: 1; }
+  .mockbtn {
+    font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; background: transparent; margin-left: 6px;
+  }
+  .mockbtn.cur { color: var(--ink-1); border-color: rgba(57,135,229,.55); }
+
+  /* ---------- KPI ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .lbl { font-size: 12px; color: var(--muted); }
+  .tile .val { font-size: 26px; font-weight: 650; margin-top: 2px; }
+  .tile .delta { font-size: 12px; margin-top: 3px; color: var(--muted); }
+  .tile .delta.bad { color: var(--serious); }
+  .tile .delta.ok { color: var(--good); }
+
+  /* ---------- 主区 ---------- */
+  .main { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .panel h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 10px; }
+  svg text { font-family: inherit; }
+
+  /* 拓扑节点 */
+  .node { cursor: pointer; }
+  .node rect.box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+  .node.warn rect.box { stroke: var(--warning); stroke-width: 1.6; }
+  .node.crit rect.box { stroke: var(--critical); stroke-width: 1.8; animation: pulse 2.2s ease-in-out infinite; }
+  .node.off rect.box { stroke-dasharray: 4 3; }
+  @keyframes pulse { 0%,100% { stroke-opacity: 1; } 50% { stroke-opacity: .35; } }
+  .node .nm { fill: var(--ink-1); font-size: 12.5px; font-weight: 560; }
+  .node .sub { fill: var(--muted); font-size: 10.5px; }
+  .node .chip-bad { fill: var(--critical); font-size: 10.5px; font-weight: 600; }
+  .node .chip-warn { fill: var(--warning); font-size: 10.5px; font-weight: 600; }
+  .node .chip-off { fill: var(--muted); font-size: 10.5px; }
+  .dot { stroke: #1a1a19; stroke-width: 2; }
+
+  .zone { fill: none; stroke: var(--hairline); stroke-dasharray: 5 5; rx: 10; }
+  .zonelbl { fill: var(--muted); font-size: 11px; letter-spacing: 1px; }
+
+  .edge { fill: none; stroke: var(--blue); stroke-opacity: .75; stroke-linecap: round; }
+  .edge.err { stroke: var(--serious); }
+  .edge.off { stroke: var(--gray-off); stroke-dasharray: 3 4; stroke-opacity: .5; }
+  .edge.anim { stroke-dasharray: 6 7; animation: flow 1.1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+  .elbl { fill: var(--muted); font-size: 10px; }
+  .elbl.err { fill: var(--serious); font-weight: 600; }
+
+  /* 事件卡 */
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-2); }
+  .card .head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .tag { font-size: 10.5px; font-weight: 650; border-radius: 4px; padding: 2px 7px; letter-spacing: .4px; }
+  .tag.bug   { color: #ffd9d9; background: rgba(208,59,59,.18); border: 1px solid rgba(208,59,59,.5); }
+  .tag.opt   { color: #ffe9c2; background: rgba(250,178,25,.14); border: 1px solid rgba(250,178,25,.45); }
+  .tag.alert { color: #ffe2d4; background: rgba(236,131,90,.16); border: 1px solid rgba(236,131,90,.5); }
+  .card .ttl { font-size: 13px; font-weight: 600; }
+  .card .body { font-size: 12px; color: var(--ink-2); line-height: 1.55; }
+  .card .kv { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted);
+              border-top: 1px solid var(--hairline); margin-top: 8px; padding-top: 6px; }
+  .card .kv span b { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .st-open { color: var(--warning); } .st-wait { color: var(--serious); }
+
+  /* 图例 */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 4px 2px; font-size: 11.5px; color: var(--ink-2); align-items: center; }
+  .legend .sw { display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .l-thin  { width: 14px; height: 2px; background: var(--blue); }
+  .l-thick { width: 14px; height: 5px; background: var(--blue); border-radius: 2px; }
+  .l-err   { width: 14px; height: 4px; background: var(--serious); border-radius: 2px; }
+  .l-off   { width: 14px; height: 0; border-top: 2px dashed var(--gray-off); }
+  .l-anim  { width: 14px; height: 3px; background: repeating-linear-gradient(90deg, var(--blue) 0 4px, transparent 4px 8px); }
+  .l-warn  { width: 9px; height: 9px; border-radius: 50%; background: var(--warning); }
+  .l-crit  { width: 9px; height: 9px; border-radius: 50%; background: var(--critical); }
+  .l-good  { width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
+
+  footer { color: var(--muted); font-size: 11.5px; padding: 12px 4px 0; line-height: 1.6; }
+
+  /* 提示框 */
+  #tip {
+    position: fixed; display: none; pointer-events: none; z-index: 9;
+    background: #242423; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; font-size: 12px; color: var(--ink-2); max-width: 260px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  }
+  #tip b { color: var(--ink-1); display: block; margin-bottom: 3px; font-size: 12.5px; }
+  #tip .m { font-variant-numeric: tabular-nums; }
+  #tip .m i { font-style: normal; color: var(--muted); }
+  #tip .code { color: var(--muted); font-size: 11px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>小秋 Ops · 拓扑观测台</h1>
+    <span class="chip">环境 <b>prod</b></span>
+    <span class="chip">绑定清单 <b>modules.yaml v3</b></span>
+    <span class="spacer"></span>
+    <button class="mockbtn cur">24 小时</button>
+    <button class="mockbtn">7 天</button>
+    <button class="mockbtn">30 天</button>
+    <button class="mockbtn">仅看异常</button>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="lbl">运行总数</div><div class="val">52</div><div class="delta ok">+18 vs 上一周期</div></div>
+    <div class="tile"><div class="lbl">成功率</div><div class="val">73.1%</div><div class="delta bad">-12.3pt · 12 次失败</div></div>
+    <div class="tile"><div class="lbl">回复 p95 延迟</div><div class="val">18.6s</div><div class="delta">非流式输出 · 含 LLM 多轮</div></div>
+    <div class="tile"><div class="lbl">活跃事件</div><div class="val">2</div><div class="delta bad">1 critical · 1 warning</div></div>
+    <div class="tile"><div class="lbl">待处理优化请求</div><div class="val">1</div><div class="delta">已邮件开发者 · 待确认</div></div>
+  </div>
+
+  <div class="main">
+    <!-- ===================== 拓扑图 ===================== -->
+    <div class="panel">
+      <h2>服务拓扑 · 节点=模块（modules.yaml） · 悬停查看指标与责任代码</h2>
+      <svg viewBox="0 0 980 648" width="100%" role="img" aria-label="小秋系统拓扑图">
+        <!-- 分区 -->
+        <rect class="zone" x="168" y="92"  width="300" height="182" rx="10"/>
+        <text class="zonelbl" x="180" y="110">接入层</text>
+        <rect class="zone" x="486" y="120" width="146" height="96" rx="10"/>
+        <text class="zonelbl" x="498" y="138">图执行</text>
+        <rect class="zone" x="648" y="24"  width="150" height="344" rx="10"/>
+        <text class="zonelbl" x="660" y="42">工具（TOOL_REGISTRY）</text>
+        <rect class="zone" x="822" y="48"  width="148" height="436" rx="10"/>
+        <text class="zonelbl" x="834" y="66">外部依赖</text>
+        <rect class="zone" x="300" y="538" width="360" height="92" rx="10"/>
+        <text class="zonelbl" x="312" y="556">主动任务（APScheduler）</text>
+
+        <!-- 边：宽=请求量 · 蓝=健康 · 橙(serious)=错误率升高 · 灰虚线=未启用 -->
+        <path class="edge"       d="M100 172 H186" stroke-width="5"/>
+        <path class="edge"       d="M298 152 C 320 152 320 136 336 136" stroke-width="5"/>
+        <path class="edge err"   d="M448 136 C 470 136 470 152 486 158" stroke-width="5"/>
+        <text class="elbl err"   x="452" y="124">err 23% · 12 失败</text>
+        <path class="edge"       d="M558 200 C 558 300 420 300 420 322" stroke-width="2.5"/>  <!-- run 生命周期 挂接 -->
+        <path class="edge anim"  d="M632 166 C 690 150 760 110 822 92"  stroke-width="6"/>
+        <text class="elbl"       x="676" y="112">96 次调用</text>
+        <path class="edge"       d="M632 172 C 690 176 760 168 822 160" stroke-width="2"/>
+        <path class="edge"       d="M632 158 C 700 110 770 66 822 56"  stroke-width="3.5"/>
+        <path class="edge"       d="M632 180 C 700 190 770 202 822 204" stroke-width="3"/>
+        <path class="edge anim"  d="M632 188 C 700 230 770 268 822 272" stroke-width="4"/>
+        <path class="edge"       d="M632 196 C 700 270 770 332 822 340" stroke-width="3"/>
+        <path class="edge"       d="M632 204 C 680 300 640 380 620 408" stroke-width="1.5"/>
+        <path class="edge off"   d="M714 196 C 760 196 780 210 822 218" stroke-width="2"/>
+        <path class="edge"       d="M714 214 C 780 240 800 260 822 264" stroke-width="2"/>
+        <path class="edge"       d="M360 560 C 560 520 780 320 828 286" stroke-width="1.5"/>
+        <path class="edge"       d="M500 560 C 700 520 800 220 826 186" stroke-width="1.5"/>
+        <path class="edge"       d="M360 588 C 600 640 800 480 830 428" stroke-width="1"/>
+
+        <!-- 用户 -->
+        <g class="node" data-name="论坛用户" data-metric="浏览器 / 主站前端" data-code="ssemarket.cn/newSSE（vue）">
+          <circle cx="86" cy="172" r="21" fill="#222221" stroke="#383835" stroke-width="1.5"/>
+          <circle cx="86" cy="166" r="5" fill="#898781"/><path d="M76 182 a10 7 0 0 1 20 0" fill="#898781"/>
+          <text class="nm" x="86" y="212" text-anchor="middle">论坛用户</text>
+        </g>
+
+        <!-- nginx -->
+        <g class="node" data-name="nginx 反代" data-metric="52 req · 0 err · p95 12ms" data-code="nginx_proxy/nginx.conf">
+          <rect class="box" x="186" y="154" width="112" height="36" rx="8"/>
+          <text class="nm" x="242" y="176" text-anchor="middle">nginx 反代</text>
+          <text class="sub" x="242" y="206" text-anchor="middle">52 req / 0 err</text>
+        </g>
+
+        <!-- 兼容 API -->
+        <g class="node" data-name="兼容 API（旧 Go 契约）" data-metric="52 调用 · 非流式 · 断连宽限 90s" data-code="app/api/compat.py · app/main.py">
+          <rect class="box" x="336" y="118" width="112" height="36" rx="8"/>
+          <text class="nm" x="392" y="134" text-anchor="middle">兼容 API</text>
+          <text class="sub" x="392" y="148" text-anchor="middle">/task/sse · /resume</text>
+          <text class="sub" x="392" y="172" text-anchor="middle">52 调用</text>
+        </g>
+
+        <!-- run 生命周期（critical） -->
+        <g class="node crit" data-name="run 生命周期" data-metric="12 failed（9×server_restart · 3×stale）" data-code="app/memory/runs.py · main.py::lifespan">
+          <rect class="box" x="336" y="322" width="112" height="36" rx="8"/>
+          <circle class="dot" cx="440" cy="328" r="4.5" fill="#d03b3b"/>
+          <text class="nm" x="392" y="338" text-anchor="middle">run 生命周期</text>
+          <text class="sub" x="392" y="350" text-anchor="middle">状态机 · 宽限 · 对账</text>
+          <text class="chip-bad" x="392" y="374" text-anchor="middle">critical · server_restart ×9</text>
+        </g>
+
+        <!-- agent 推理 -->
+        <g class="node" data-name="agent 推理节点（prep+agent+tools）" data-metric="52 runs · 工具循环 · token 预算 60k" data-code="app/graph/build.py">
+          <rect class="box" x="486" y="150" width="146" height="36" rx="8"/>
+          <text class="nm" x="559" y="166" text-anchor="middle">agent 推理</text>
+          <text class="sub" x="559" y="180" text-anchor="middle">prep → LLM → tools 循环</text>
+          <text class="sub" x="559" y="210" text-anchor="middle">多轮 / run</text>
+        </g>
+
+        <!-- 工具节点 -->
+        <g class="node" data-name="sql_post_search（含 latest/stats）" data-metric="31 调用 · 0 err · p95 45ms" data-code="app/tools/forum/sql_templates.py">
+          <rect class="box" x="648" y="48" width="112" height="34" rx="8"/>
+          <text class="nm" x="704" y="70" text-anchor="middle">论坛 SQL 搜索</text>
+        </g>
+        <g class="node" data-name="kb_search" data-metric="12 调用 · 2 超时降级（frp）· p95 2.1s" data-code="app/tools/chat/kb_search.py">
+          <rect class="box" x="648" y="118" width="112" height="34" rx="8"/>
+          <text class="nm" x="704" y="140" text-anchor="middle">kb_search</text>
+        </g>
+        <g class="node off" data-name="web_search" data-metric="未启用 · enabled=false · 等 API key" data-code="app/tools/chat/web_search.py">
+          <rect class="box" x="648" y="188" width="112" height="34" rx="8"/>
+          <text class="nm" x="704" y="204" text-anchor="middle" fill="#898781">web_search</text>
+          <text class="chip-off" x="704" y="240" text-anchor="middle">未启用（等 key）</text>
+        </g>
+        <g class="node" data-name="submit_feedback" data-metric="6 调用 · 0 err · 冷却拦截 2 次" data-code="app/tools/notify/feedback.py">
+          <rect class="box" x="648" y="252" width="112" height="34" rx="8"/>
+          <text class="nm" x="704" y="274" text-anchor="middle">submit_feedback</text>
+        </g>
+        <g class="node" data-name="kill_process（L3·HITL）" data-metric="1 调用 · 审批通过 · 白名单校验" data-code="app/tools/ops/kill.py">
+          <rect class="box" x="648" y="322" width="112" height="34" rx="8"/>
+          <text class="nm" x="704" y="344" text-anchor="middle">kill_process</text>
+          <text class="sub" x="704" y="368" text-anchor="middle">L3 · 强制审批</text>
+        </g>
+
+        <!-- 外部依赖 -->
+        <g class="node" data-name="LLM 网关 qwen3.8-27b" data-metric="96 调用 · err 0% · p95 6.8s · 最热路径" data-code="api.ssemarket.cn/v1（自建）">
+          <rect class="box" x="822" y="74" width="112" height="36" rx="8"/>
+          <circle class="dot" cx="924" cy="80" r="4.5" fill="#0ca30c"/>
+          <text class="nm" x="878" y="96" text-anchor="middle">LLM 网关</text>
+          <text class="sub" x="878" y="126" text-anchor="middle">96 调用 · p95 6.8s</text>
+        </g>
+        <g class="node" data-name="智谱备端点 glm-4.5-flash" data-metric="0 调用（主备池 · 仅故障切换）" data-code="open.bigmodel.cn（备用端点）">
+          <rect class="box" x="822" y="142" width="112" height="34" rx="8"/>
+          <text class="nm" x="878" y="164" text-anchor="middle">智谱备用</text>
+        </g>
+        <g class="node warn" data-name="Qdrant 向量库（经 frp 隧道）" data-metric="12 查询 · 2 超时 · p95 抖动" data-code="rag/store.py · frp 25033">
+          <rect class="box" x="822" y="186" width="112" height="34" rx="8"/>
+          <circle class="dot" cx="924" cy="192" r="4.5" fill="#fab219"/>
+          <text class="nm" x="878" y="208" text-anchor="middle">Qdrant</text>
+          <text class="chip-warn" x="878" y="240" text-anchor="middle">warning · frp 链路抖动</text>
+        </g>
+        <g class="node" data-name="bge-m3 embedding（GPU）" data-metric="12 调用 · 0 err · p95 300ms" data-code="rag/store.py::embed">
+          <rect class="box" x="822" y="246" width="112" height="34" rx="8"/>
+          <text class="nm" x="878" y="268" text-anchor="middle">embedding</text>
+        </g>
+        <g class="node" data-name="论坛 MySQL（容器 sse_market_db）" data-metric="31+ 调用 · 0 err · 超时上限 3s" data-code="tools/forum/sql_templates.py::pool">
+          <rect class="box" x="822" y="304" width="112" height="34" rx="8"/>
+          <text class="nm" x="878" y="326" text-anchor="middle">论坛 MySQL</text>
+        </g>
+        <g class="node" data-name="Agent PostgreSQL（状态唯一归属）" data-metric="checkpoint/记忆/台账/runs" data-code="全部状态 · sse_agent_pg">
+          <rect class="box" x="822" y="368" width="112" height="34" rx="8"/>
+          <text class="nm" x="878" y="390" text-anchor="middle">Agent PG</text>
+        </g>
+        <g class="node" data-name="邮件通道（log 模式，等 SMTP 授权码）" data-metric="反馈 6 封落盘 · 日报 1 封" data-code="tools/notify/mail.py">
+          <rect class="box" x="822" y="432" width="112" height="34" rx="8"/>
+          <text class="nm" x="878" y="448" text-anchor="middle">邮件通道</text>
+          <text class="sub" x="878" y="462" text-anchor="middle">log 模式</text>
+        </g>
+
+        <!-- 主动任务 -->
+        <g class="node" data-name="daily_digest 09:00" data-metric="1 执行 · success · 幂等" data-code="app/tasks/daily_digest.py">
+          <rect class="box" x="316" y="566" width="112" height="34" rx="8"/>
+          <text class="nm" x="372" y="588" text-anchor="middle">daily_digest</text>
+        </g>
+        <g class="node" data-name="rag_reconcile 每 10 分钟" data-metric="144 执行 · 补漏含评论" data-code="app/api/internal.py::reconcile">
+          <rect class="box" x="456" y="566" width="130" height="34" rx="8"/>
+          <text class="nm" x="521" y="588" text-anchor="middle">rag_reconcile 10min</text>
+        </g>
+      </svg>
+
+      <div class="legend">
+        <span><span class="sw l-thin"></span>低流量</span>
+        <span><span class="sw l-thick"></span>高流量（边宽=请求量）</span>
+        <span><span class="sw l-err"></span>错误率升高</span>
+        <span><span class="sw l-anim"></span>活跃请求（动画）</span>
+        <span><span class="sw l-off"></span>未启用</span>
+        <span><span class="sw l-good"></span>正常</span>
+        <span><span class="sw l-warn"></span>告警</span>
+        <span><span class="sw l-crit"></span>严重</span>
+      </div>
+    </div>
+
+    <!-- ===================== 事件流 ===================== -->
+    <div>
+      <div class="panel">
+        <h2>事件流 · Ops Agent 初定位</h2>
+
+        <div class="card">
+          <div class="head"><span class="tag bug">BUG · CRITICAL</span><span class="ttl">run 生命周期 · server_restart ×9</span></div>
+          <div class="body">
+            占全部运行的 17%。错误签名规则命中：部署（scp + docker restart）无 drain，在跑 run 被直接终止。
+            <br>嫌疑代码：<b>app/main.py::lifespan</b>（fail_orphans 只做事后对账，无事前等待）
+            <br>建议动作：deploy.sh 先摘流量（nginx ready）→ 等待在跑 run ≤30s → 再 restart
+          </div>
+          <div class="kv">
+            <span>定位方式 <b>签名规则（确定性）</b></span>
+            <span>状态 <b class="st-wait">待开发者确认</b></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span class="tag opt">优化请求 · OPEN</span><span class="ttl">兼容 API · #17 流式无等待提示</span></div>
+          <div class="body">
+            来源：用户经小秋提交（submit_feedback 管道）。原话摘录："消息发出去要等很久，中间什么提示都没有，以为卡死了"。
+            <br>Ops Agent 定位模块：<b>api_compat</b> + node_agent（输出层）
+            <br>已邮件 devs 组（2026-09-10 03:2x），图上已标注
+          </div>
+          <div class="kv">
+            <span>分类 <b>体验优化</b></span>
+            <span>状态 <b class="st-open">已转开发者</b></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span class="tag alert">告警 · WARNING</span><span class="ttl">Qdrant · frp 链路抖动</span></div>
+          <div class="body">
+            kb_search 12 次调用中 2 次超时（16.7%）。贡献因素：frp 隧道约 2 分钟一次的切换窗口（历史已知）。
+            <br>已有缓解：启动重试 30 次 + kb 不可用时自动降级 SQL 关键词搜索（eval 已验证）
+            <br>初判：无需升级，持续观察
+          </div>
+          <div class="kv">
+            <span>定位方式 <b>规则 + LLM 贡献因素</b></span>
+            <span>状态 <b>观察中</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <h2>意图通道 · 闭环状态</h2>
+        <div class="card">
+          <div class="body" style="line-height:1.9">
+            用户口述 → 小秋整理（分类/标题/摘要+原话）→ Ops Agent 定位模块 →
+            图上标注 + 邮件 devs → 开发者处理 → 图上状态更新为 closed<br>
+            <span style="color:var(--muted)">本周期：1 条优化请求进入通道 · 0 条关闭</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    预览说明：单文件静态 mock（数据为演示值，其中运行数 52 / 失败 12 / server_restart ×9 / stale_cleanup ×3 / frp 抖动 为 2026-09-10 生产 runs 表与运维记录的真实统计）。
+    正式版数据源：modules.yaml（结构）+ /metrics 带模块标签（遥测）+ annotations 表（意图），由 GET /ops/topology 聚合输出；节点悬停可查看指标与责任代码路径（本预览已实现悬停）。
+  </footer>
+</div>
+
+<div id="tip"></div>
+<script>
+  const tip = document.getElementById('tip');
+  document.querySelectorAll('.node').forEach(n => {
+    n.addEventListener('mouseenter', e => {
+      tip.innerHTML = '<b>' + n.dataset.name + '</b>'
+        + '<span class="m">' + n.dataset.metric + '</span>'
+        + '<div class="code">' + n.dataset.code + '</div>';
+      tip.style.display = 'block';
+    });
+    n.addEventListener('mousemove', e => {
+      const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+      let x = e.clientX + pad, y = e.clientY + pad;
+      if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+      if (y + h > innerHeight - 8) y = e.clientY - h - pad;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+    n.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+</script>
+</body>
+</html>

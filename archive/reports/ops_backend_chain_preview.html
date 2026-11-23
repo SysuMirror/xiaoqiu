@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>后端全链路观测 · 一条请求的旅程（V2 预览）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222221; --surface-3: #2a2a28;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --hairline: #2c2c2a; --border: rgba(255,255,255,0.10);
+    --blue: #3987e5; --blue-deep: #256abf;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --serious: #ec835a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--page); color: var(--ink-1);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px; padding: 18px; }
+  .wrap { max-width: 1500px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; flex-wrap: wrap; }
+  h1 { font-size: 17px; font-weight: 650; }
+  .chip { font-size: 12px; color: var(--ink-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; background: var(--surface); }
+  .chip b { color: var(--ink-1); font-weight: 600; }
+  .chip.ok { border-color: rgba(12,163,12,.45); } .chip.ok b { color: #7bd88f; }
+
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; }
+  .tile .l { font-size: 12px; color: var(--muted); } .tile .v { font-size: 24px; font-weight: 650; margin-top: 2px; }
+  .tile .v.bad { color: var(--serious); } .tile .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .layout { display: grid; grid-template-columns: 1fr 348px; gap: 12px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .panel h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 2px 4px 10px; }
+  svg text { font-family: inherit; }
+
+  .zone { fill: none; stroke: var(--hairline); stroke-dasharray: 5 5; }
+  .zonelbl { fill: var(--muted); font-size: 11px; letter-spacing: 1.5px; }
+  .node rect, .node circle { fill: var(--surface-2); stroke: var(--border); }
+  .node .nm { fill: var(--ink-1); font-size: 12.5px; font-weight: 600; text-anchor: middle; }
+  .node .sub { fill: var(--muted); font-size: 10.5px; text-anchor: middle; }
+  .node.crit rect { stroke: var(--critical); stroke-width: 1.8; animation: pulse 2.2s ease-in-out infinite; }
+  .node.warn rect { stroke: var(--warning); stroke-width: 1.6; }
+  .node.ext rect { stroke-dasharray: 5 4; }
+  @keyframes pulse { 0%,100% { stroke-opacity: 1; } 50% { stroke-opacity: .35; } }
+  .mw-chip rect { fill: var(--surface-3); stroke: rgba(255,255,255,0.08); rx: 5; }
+  .mw-chip text { fill: var(--ink-2); font-size: 11px; }
+  .mw-chip .v { fill: var(--muted); font-size: 9.5px; }
+  .edge { fill: none; stroke: #2f5c94; stroke-opacity: .85; stroke-linecap: round; }
+  .edge.anim { stroke: var(--blue); stroke-dasharray: 7 8; animation: flow 1.1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -15; } }
+  .edge.errline { stroke: var(--critical); stroke-width: 3; stroke-dasharray: 8 6; animation: flow 1.4s linear infinite; }
+  .elbl { fill: var(--muted); font-size: 10px; }
+  .ebadge { fill: var(--critical); font-size: 10.5px; font-weight: 700; text-anchor: middle; }
+  .dot { stroke: #1a1a19; stroke-width: 2; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 4px 2px; font-size: 11.5px; color: var(--ink-2); align-items: center; }
+  .sw { display: inline-block; vertical-align: middle; margin-right: 5px; }
+  .l-edge { width: 16px; height: 3px; background: var(--blue); border-radius: 2px; }
+  .l-err { width: 16px; height: 4px; background: var(--critical); border-radius: 2px; }
+  .l-ext { width: 16px; height: 0; border-top: 2px dashed var(--muted); }
+  .l-good, .l-warn, .l-crit { width: 9px; height: 9px; border-radius: 50%; }
+  .l-good { background: var(--good); } .l-warn { background: var(--warning); } .l-crit { background: var(--critical); }
+
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-2); }
+  .card .head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; flex-wrap: wrap; }
+  .tag { font-size: 10px; font-weight: 650; border-radius: 4px; padding: 2px 7px; letter-spacing: .4px; }
+  .tag.bug { color: #ffd9d9; background: rgba(208,59,59,.18); border: 1px solid rgba(208,59,59,.5); }
+  .tag.opt { color: #ffe9c2; background: rgba(250,178,25,.14); border: 1px solid rgba(250,178,25,.45); }
+  .tag.ctrl { color: #cfe4fb; background: rgba(57,135,229,.15); border: 1px solid rgba(57,135,229,.5); }
+  .tag.dev { color: #d9d8cf; background: rgba(137,135,129,.15); border: 1px solid rgba(137,135,129,.5); }
+  .card .t { font-size: 13px; font-weight: 620; }
+  .card .d { font-size: 11.8px; color: var(--ink-2); line-height: 1.6; }
+  .card .d b { color: var(--ink-1); }
+  .card .m { font-size: 11px; color: var(--muted); margin-top: 6px; border-top: 1px solid var(--hairline); padding-top: 6px; }
+  .kv { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .kv span { font-size: 10.5px; color: var(--ink-2); background: var(--surface-3); border: 1px solid var(--hairline); border-radius: 5px; padding: 2px 7px; }
+  .st-wait { color: var(--serious); font-weight: 600; } .st-open { color: var(--warning); font-weight: 600; }
+
+  .steps { counter-reset: s; }
+  .steps div { position: relative; padding: 0 0 10px 26px; font-size: 11.8px; color: var(--ink-2); line-height: 1.5; }
+  .steps div::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0;
+    width: 17px; height: 17px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--border);
+    color: var(--ink-2); font-size: 10px; display: flex; align-items: center; justify-content: center; }
+  .steps b { color: var(--ink-1); }
+
+  .sync { display: flex; gap: 0; align-items: stretch; margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .sync div { flex: 1; padding: 9px 12px; font-size: 11.5px; color: var(--ink-2); background: var(--surface); border-right: 1px solid var(--hairline); }
+  .sync div:last-child { border-right: none; }
+  .sync b { color: var(--ink-1); display: block; font-size: 12px; margin-bottom: 2px; }
+
+  footer { color: var(--muted); font-size: 11.5px; padding: 12px 4px 0; line-height: 1.6; }
+  #tip { position: fixed; display: none; pointer-events: none; z-index: 9; background: #242423;
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 12px; color: var(--ink-2);
+    max-width: 270px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  #tip b { color: var(--ink-1); display: block; margin-bottom: 3px; }
+  #tip .src { color: var(--muted); font-size: 10.5px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>后端全链路观测台</h1>
+    <span class="chip">repo <b>SSE_market_server</b> · online 分支</span>
+    <span class="chip">快照 <b>12:40Z</b> · 窗口 60min</span>
+    <span class="chip ok">图一致性 <b>CI 通过</b>（gen --check）</span>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="l">请求总量</div><div class="v">21.3k/h</div><div class="s">峰值 355/min（登录）</div></div>
+    <div class="tile"><div class="l">整体错误率</div><div class="v">0.42%</div><div class="s">5xx 89 次</div></div>
+    <div class="tile"><div class="l">活跃告警</div><div class="v bad">1</div><div class="s">COS 上传链 · critical</div></div>
+    <div class="tile"><div class="l">待处理优化请求</div><div class="v">1</div><div class="s">已邮件开发者</div></div>
+    <div class="tile"><div class="l">链路模块</div><div class="v">18+9</div><div class="s">业务域 8 · 中间件 7 · 依赖 4</div></div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h2>一条请求的旅程 · 悬停任意节点查看代码绑定与数据来源</h2>
+        <svg viewBox="0 0 1460 560" width="100%" role="img" aria-label="后端请求链路图">
+          <!-- 分区 -->
+          <rect class="zone" x="150" y="60" width="110" height="440" rx="10"/>
+          <text class="zonelbl" x="160" y="78">接入</text>
+          <rect class="zone" x="285" y="60" width="310" height="440" rx="10"/>
+          <text class="zonelbl" x="297" y="78">GIN 中间件管道（顺序敏感）</text>
+          <rect class="zone" x="628" y="60" width="370" height="440" rx="10"/>
+          <text class="zonelbl" x="640" y="78">控制器 · 按业务域</text>
+          <rect class="zone" x="1022" y="60" width="170" height="440" rx="10"/>
+          <text class="zonelbl" x="1034" y="78">分层</text>
+          <rect class="zone" x="1218" y="60" width="225" height="440" rx="10"/>
+          <text class="zonelbl" x="1230" y="78">数据与外部依赖</text>
+
+          <!-- 客户端 -->
+          <g class="node" data-name="客户端（浏览器 / 主站前端）" data-sub="Vue 前端 + 小秋对话入口" data-src="ssemarket.cn">
+            <rect x="14" y="250" width="112" height="48" rx="9"/>
+            <text class="nm" x="70" y="271">客户端</text>
+            <text class="sub" x="70" y="287">Vue 前端</text>
+          </g>
+
+          <!-- nginx -->
+          <g class="node" data-name="nginx 反代" data-sub="总路由表：/api → Go 后端；/api/v1/agent → 小秋" data-code="nginx_proxy/nginx.conf" data-src="部署事实">
+            <rect x="163" y="250" width="86" height="48" rx="9"/>
+            <text class="nm" x="206" y="271">nginx</text>
+            <text class="sub" x="206" y="287">入口</text>
+          </g>
+
+          <!-- 中间件管道：chips -->
+          <g class="mw-chip" data-name="RequestID" data-code="middleware/request_id.go" data-src="main.go:182 顺序提取">
+            <rect x="305" y="96" width="270" height="30" rx="5"/><text x="317" y="115">RequestID</text>
+            <text class="v" x="560" y="115" text-anchor="end">全链路追踪 ID</text></g>
+          <g class="mw-chip" data-name="Tracing (otelgin)" data-code="observability/tracing.go" data-src="main.go:186 条件启用">
+            <rect x="305" y="134" width="270" height="30" rx="5"/><text x="317" y="153">Tracing（otelgin）</text>
+            <text class="v" x="560" y="153" text-anchor="end">span 打点</text></g>
+          <g class="mw-chip" data-name="PrometheusMetrics" data-code="middleware/metrics.go" data-src="main.go:191 · 产出 /metrics（本图遥测源）">
+            <rect x="305" y="172" width="270" height="30" rx="5"/><text x="317" y="191">Metrics</text>
+            <text class="v" x="560" y="191" text-anchor="end">per-route RED</text></g>
+          <g class="mw-chip" data-name="LoggerToFile" data-code="middleware/logMiddleware.go" data-src="main.go:192">
+            <rect x="305" y="210" width="270" height="30" rx="5"/><text x="317" y="229">LoggerToFile</text>
+            <text class="v" x="560" y="229" text-anchor="end">访问日志</text></g>
+          <g class="mw-chip" data-name="CORS" data-code="middleware/CORSMiddleware.go" data-src="routes.go CollectRoute">
+            <rect x="305" y="248" width="270" height="30" rx="5"/><text x="317" y="267">CORS</text>
+            <text class="v" x="560" y="267" text-anchor="end">跨域</text></g>
+          <g class="mw-chip" data-name="Auth（三分支）" data-code="middleware/authMiddleware.go · strict_auth.go · oauthMiddleware.go" data-src="routes.go 三路由组：auth=Strict+Bloom / noauth=Optional / oauth=OAuth">
+            <rect x="305" y="286" width="270" height="30" rx="5"/><text x="317" y="305">Auth：Strict / Optional / OAuth</text>
+            <text class="v" x="560" y="305" text-anchor="end">按路由组</text></g>
+          <g class="mw-chip" data-name="BloomFilter + 登录限流" data-code="middleware/user_session.go · login_rate_limit.go" data-src="auth 组专属 · 登录 500次/min/IP">
+            <rect x="305" y="324" width="270" height="30" rx="5"/><text x="317" y="343">BloomFilter · 登录限流</text>
+            <text class="v" x="560" y="343" text-anchor="end">防刷</text></g>
+          <text class="elbl" x="440" y="380" text-anchor="middle">每条请求按序穿过全部 7 层（顺序即 main.go 注册序）</text>
+          <text class="elbl" x="440" y="398" text-anchor="middle">限流/鉴权类故障常发于此——因此中间层显式建模</text>
+
+          <!-- 业务域卡片 -->
+          <g class="node" data-name="用户/认证域（4 模块）" data-code="controller/userController.go · ssoController.go · user_api_token.go · open_user_controller.go" data-metric="5.8 req/min · err 0.1%" data-src="backend_map.yaml">
+            <rect x="648" y="96" width="165" height="66" rx="9"/><circle class="dot" cx="800" cy="106" r="4" fill="#0ca30c"/>
+            <text class="nm" x="730" y="120">用户/认证 ×4</text>
+            <text class="sub" x="730" y="138">5.8/min · err 0.1%</text>
+            <text class="sub" x="730" y="152">登录/SSO/PAT/开放</text></g>
+          <g class="node" data-name="帖子域" data-code="controller/postController.go · adminBlogController.go" data-metric="3.2 req/min · err 0%" data-ann="优化请求 ×1" data-src="backend_map.yaml">
+            <rect x="828" y="96" width="165" height="66" rx="9"/><circle class="dot" cx="980" cy="106" r="4" fill="#0ca30c"/>
+            <text class="nm" x="910" y="120">帖子 ×2</text>
+            <text class="sub" x="910" y="138">3.2/min · err 0%</text>
+            <text class="sub" x="910" y="152" fill="#fab219">标注：优化请求 ×1</text></g>
+          <g class="node" data-name="评论域" data-code="controller/commentController.go" data-metric="1.1 req/min · err 0%" data-src="backend_map.yaml">
+            <rect x="648" y="182" width="165" height="66" rx="9"/><circle class="dot" cx="800" cy="192" r="4" fill="#0ca30c"/>
+            <text class="nm" x="730" y="206">评论 ×1</text>
+            <text class="sub" x="730" y="224">1.1/min · err 0%</text></g>
+          <g class="node crit" data-name="音乐域（错误链）" data-code="controller/musicController.go → api/cosBucket.go" data-metric="0.9 req/min · err 4.1%（COS 链）" data-src="错误签名 cos_timeout 命中">
+            <rect x="828" y="182" width="165" height="66" rx="9"/><circle class="dot" cx="980" cy="192" r="4" fill="#d03b3b"/>
+            <text class="nm" x="910" y="206">音乐 ×1</text>
+            <text class="sub" x="910" y="224">0.9/min · err 4.1%</text>
+            <text class="ebadge" x="910" y="241">COS 链告警</text></g>
+          <g class="node" data-name="运营活动域（6 模块）" data-code="shopController · lottery · vote · rating · sue · quest" data-metric="0.7 req/min · err 0%" data-src="backend_map.yaml">
+            <rect x="648" y="268" width="165" height="66" rx="9"/><circle class="dot" cx="800" cy="278" r="4" fill="#0ca30c"/>
+            <text class="nm" x="730" y="292">运营活动 ×6</text>
+            <text class="sub" x="730" y="310">0.7/min · err 0%</text>
+            <text class="sub" x="730" y="324">商店/抽奖/投票/打分</text></g>
+          <g class="node" data-name="管理端域（3 模块）" data-code="adminManageController · adminOAuth · managerController" data-metric="0.3 req/min · err 0%" data-src="backend_map.yaml">
+            <rect x="828" y="268" width="165" height="66" rx="9"/><circle class="dot" cx="980" cy="278" r="4" fill="#0ca30c"/>
+            <text class="nm" x="910" y="292">管理端 ×3</text>
+            <text class="sub" x="910" y="310">0.3/min · err 0%</text></g>
+          <g class="node" data-name="工作台/平台域（2 模块）" data-code="workbench_controller.go · api/（平台签名中转）" data-metric="0.2 req/min · err 0%" data-src="backend_map.yaml">
+            <rect x="648" y="354" width="165" height="66" rx="9"/><circle class="dot" cx="800" cy="364" r="4" fill="#0ca30c"/>
+            <text class="nm" x="730" y="378">工作台/平台 ×2</text>
+            <text class="sub" x="730" y="396">0.2/min · err 0%</text></g>
+          <g class="node" data-name="平台与系统（4 模块）" data-code="health · viewer · raghook · misc" data-metric="含 raghook→小秋 webhook" data-src="backend_map.yaml">
+            <rect x="828" y="354" width="165" height="66" rx="9"/><circle class="dot" cx="980" cy="364" r="4" fill="#0ca30c"/>
+            <text class="nm" x="910" y="378">平台系统 ×4</text>
+            <text class="sub" x="910" y="396">health/raghook 等</text></g>
+
+          <!-- 分层 -->
+          <g class="node" data-name="service 层（业务逻辑）" data-code="service/*.go · interfaces.go" data-sub="18 个控制器共用的业务实现" data-src="目录分层事实">
+            <rect x="1034" y="140" width="146" height="58" rx="9"/>
+            <text class="nm" x="1107" y="163">service 层</text>
+            <text class="sub" x="1107" y="181">业务逻辑</text></g>
+          <g class="node" data-name="repository 层（gorm）" data-code="repository/ · gormrepo/" data-sub="数据访问唯一出口" data-src="目录分层事实">
+            <rect x="1034" y="240" width="146" height="58" rx="9"/>
+            <text class="nm" x="1107" y="263">repository 层</text>
+            <text class="sub" x="1107" y="281">gorm 数据访问</text></g>
+          <g class="node" data-name="model / domain（数据模型）" data-code="model/ · domain/" data-sub="实体定义" data-src="目录分层事实">
+            <rect x="1034" y="340" width="146" height="58" rx="9"/>
+            <text class="nm" x="1107" y="363">model / domain</text>
+            <text class="sub" x="1107" y="381">实体定义</text></g>
+
+          <!-- 数据与外部 -->
+          <g class="node" data-name="论坛 MySQL" data-code="common/database.go · 容器 sse_market_db" data-metric="qps 9.4 · err 0 · 慢查询 0" data-src="遥测 60min 窗口">
+            <rect x="1232" y="120" width="196" height="56" rx="9"/><circle class="dot" cx="1414" cy="130" r="4" fill="#0ca30c"/>
+            <text class="nm" x="1330" y="143">论坛 MySQL</text>
+            <text class="sub" x="1330" y="161">qps 9.4 · err 0</text></g>
+          <g class="node crit" data-name="腾讯云 COS（根因候选）" data-code="api/cosBucket.go" data-metric="音乐双写备份 · 1h 内超时 23 次" data-src="上游回溯结论：中间件/MySQL 均正常 → 根因收敛于此">
+            <rect x="1232" y="206" width="196" height="56" rx="9"/><circle class="dot" cx="1414" cy="216" r="4" fill="#d03b3b"/>
+            <text class="nm" x="1330" y="229">腾讯云 COS</text>
+            <text class="ebadge" x="1330" y="247">根因候选 · timeout ×23</text></g>
+          <g class="node" data-name="缓存 / 消息队列" data-code="cache/ · mq/" data-sub="待登记（下一版生成器纳入）" data-src="目录事实">
+            <rect x="1232" y="292" width="196" height="48" rx="9"/>
+            <text class="nm" x="1330" y="312">cache · mq</text>
+            <text class="sub" x="1330" y="330">待登记</text></g>
+          <g class="node ext" data-name="小秋 sse-agent（webhook）" data-code="controller/raghook.go → agent /internal/rag" data-sub="发帖/删帖实时同步向量索引（best-effort）" data-src="backend_map.yaml">
+            <rect x="1232" y="364" width="196" height="56" rx="9"/>
+            <text class="nm" x="1330" y="387">小秋（raghook）</text>
+            <text class="sub" x="1330" y="405">事件 webhook</text></g>
+
+          <!-- 边 -->
+          <path class="edge anim" d="M126 274 H163" stroke-width="5"/>
+          <path class="edge anim" d="M249 274 C 268 274 275 260 305 262 C 380 270 420 160 440 128" stroke-width="5"/>
+          <text class="elbl" x="258" y="258">355/min</text>
+          <path class="edge anim" d="M575 262 C 600 262 615 210 648 130" stroke-width="4"/>
+          <path class="edge" d="M813 129 C 900 129 990 160 1034 165" stroke-width="2.5"/>
+          <path class="edge" d="M993 215 C 1010 210 1024 180 1034 172" stroke-width="2"/>
+          <path class="edge" d="M1107 198 V240" stroke-width="4"/>
+          <path class="edge" d="M1107 298 V340" stroke-width="2"/>
+          <path class="edge anim" d="M1180 168 C 1200 168 1215 158 1232 152" stroke-width="4"/>
+          <path class="edge" d="M1180 266 C 1200 262 1215 240 1232 234" stroke-width="3"/>
+          <path class="edge" d="M993 435 C 1060 470 1160 450 1232 400" stroke-width="1.5"/>
+          <!-- 错误链：音乐 → COS -->
+          <path class="edge errline" d="M993 218 C 1060 210 1140 214 1232 230"/>
+          <path class="edge" d="M890 96 V60" stroke-width="0" />
+        </svg>
+        <div class="legend">
+          <span><span class="sw l-edge"></span>流量（宽=速率，动画=活跃）</span>
+          <span><span class="sw l-err"></span>错误链路（签名命中段）</span>
+          <span><span class="sw l-ext"></span>外部系统</span>
+          <span><span class="sw l-good"></span>正常</span>
+          <span><span class="sw l-crit"></span>错误/根因候选</span>
+          <span><span class="sw l-warn"></span>标注待处理</span>
+        </div>
+      </div>
+
+      <div class="sync">
+        <div><b>结构 · 生成</b>backend_map.yaml 由 routes.go + main.go + imports 生成</div>
+        <div><b>一致 · CI</b>gen --check 防漂移，改代码不改图 = 流水线红</div>
+        <div><b>行为 · 实时</b>/metrics 30s 差分，遥测永不漂移</div>
+        <div><b>意图 · 留痕</b>标注/告警版本化落库，动作过 HITL</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>事件流 · 拓扑告警关联</h2>
+
+        <div class="card">
+          <div class="head"><span class="tag bug">BUG · CRITICAL</span><span class="t">音乐上传链 · COS 超时</span></div>
+          <div class="d">
+            签名规则命中 <b>cos_timeout</b>（确定性）。1h 内 23 次，集中在音乐上传/封面写 COS。
+            <br><b>嫌疑链路</b>：中间件管道 → 音乐域 → 腾讯云 COS
+            <br><b>上游回溯</b>：管道各层正常 · service/repository 正常 · MySQL 正常 → 根因收敛：
+            <b>api/cosBucket.go</b>（COS 侧超时或签名过期）
+            <br><b>下游抑制</b>：已合并同源告警 2 条（上传失败 5xx 属连锁，不重复报）
+          </div>
+          <div class="kv"><span>定位：签名规则（确定性）</span><span>首次 11:58Z</span><span>影响路由 4 条</span></div>
+          <div class="m">状态 <span class="st-wait">待开发者确认</span> · 已邮件 devs · 图上红链已标注</div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span class="tag opt">优化请求 · OPEN</span><span class="t">帖子搜索 · 拼音模糊匹配 #17</span></div>
+          <div class="d">
+            来源：用户经小秋提交（"中文打错一个字就搜不到"）。
+            <br>Ops Agent 定位：<b>帖子域（postController.go）</b> + 下游 repository 查询层
+            <br>已邮件 devs（12:05），图上帖子模块已挂标注
+          </div>
+          <div class="m">状态 <span class="st-open">已转开发者</span> · 闭环后图上标注自动消失</div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span class="tag ctrl">控制面 · 小秋</span><span class="t">对后端的受控动作</span></div>
+          <div class="d">
+            <b>L1 只读</b>：backend_status / backend_logs（按模块过滤）
+            <br><b>L3 必审</b>：backend_restart（白名单容器 + interrupt 审批 + 台账）
+            <br>被动：raghook 接收发帖/删帖事件
+          </div>
+          <div class="m">动手前回答四问：什么坏了 · 影响谁 · 哪条链 · 风险多大</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <h2>开发者工具</h2>
+        <div class="card">
+          <div class="head"><span class="tag dev">影响分析</span><span class="t">"我要改这里，谁受影响？"</span></div>
+          <div class="d" style="margin-bottom:6px;color:var(--muted)">查询：service/user_service.go</div>
+          <div class="kv">
+            <span>上游：用户域 4 控制器</span><span>涉及路由 31 条</span><span>下游：repository/user</span>
+            <span>外部：无</span>
+          </div>
+          <div class="m">反向依赖 = 绑定清单 imports 边的一次遍历（grep 做不到跨层）</div>
+        </div>
+        <div class="card">
+          <div class="head"><span class="tag dev">新人上手</span><span class="t">后端 5 分钟路径</span></div>
+          <div class="steps">
+            <div>看<b>这条链路图</b>：请求从 nginx 穿 7 层中间件进业务域</div>
+            <div>路由唯一注册处 <b>route/routes.go</b>——想知道某接口在哪，搜它</div>
+            <div>分层铁律：<b>controller → service → repository</b>，数据访问只走 repo</div>
+            <div>点模块卡片直达代码文件；有疑问问小秋（它读同一张图）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    预览说明：单文件静态 mock。结构（模块/中间件/分层/依赖）与代码绑定均取自 SSE_market_server 真实勘察（main.go 中间件注册序、routes.go 路由、目录分层、COS 双写、raghook）；
+    遥测数值与两张事件卡为演示数据（生产接入后来自 /metrics 差分与错误签名命中）。悬停节点可看代码路径与数据来源角标。
+  </footer>
+</div>
+
+<div id="tip"></div>
+<script>
+  const tip = document.getElementById('tip');
+  document.querySelectorAll('.node, .mw-chip').forEach(n => {
+    n.addEventListener('mouseenter', () => {
+      const rows = [
+        n.dataset.name && '<b>' + n.dataset.name + '</b>',
+        n.dataset.sub && n.dataset.sub,
+        n.dataset.metric && '<span style="color:#c3c2b7">' + n.dataset.metric + '</span>',
+        n.dataset.ann && '<span style="color:#fab219">' + n.dataset.ann + '</span>',
+        n.dataset.code && '<span style="color:#898781">代码：' + n.dataset.code + '</span>',
+      ].filter(Boolean).join('');
+      tip.innerHTML = rows + '<div class="src">来源：' + (n.dataset.src || '静态分析生成') + '</div>';
+      tip.style.display = 'block';
+    });
+    n.addEventListener('mousemove', e => {
+      const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+      let x = e.clientX + pad, y = e.clientY + pad;
+      if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+      if (y + h > innerHeight - 8) y = e.clientY - h - pad;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+    n.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+</script>
+</body>
+</html>

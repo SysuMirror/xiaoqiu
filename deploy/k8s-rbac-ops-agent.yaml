@@ -1,0 +1,43 @@
+# ops agent 的 k3s 最小权限（pod 级观测 + 受控重启 + exec 控制台）
+# 原则：只读为主；写动词 = 删除 pod（=Deployment 重建重启）+ pods/exec（面板控制台，
+# 护栏在应用层：kube-* 系统命名空间与 agent 自身 pod 拒绝）；不含 secrets/configmaps/scale。
+# 绑定对象：qiudock:ops-agent（专用 SA，token 经 Secret 注入 agent env，见 scripts 一次性安装记录）。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ops-agent
+  namespace: qiudock
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-agent-podops
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]  # WS 握手(GET)按 get 授权，老客户端 POST 按 create——两者都给
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-agent-podops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-agent-podops
+subjects:
+  - kind: ServiceAccount
+    name: ops-agent
+    namespace: qiudock

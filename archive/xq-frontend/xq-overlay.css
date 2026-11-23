@@ -1,0 +1,30 @@
+/* 小秋覆盖层（Teleport 到 body 的抽屉/遮罩）专用变量。
+   脱离 .smart-page 作用域后变量不再继承，故在此独立定义；暗色跟随 body.dark-mode。 */
+.xq-teleport {
+  --xq-surface: #ffffff;
+  --xq-surface-muted: #f3f6f9;
+  --xq-accent: #2aab9f;
+  --xq-accent-deep: #1f8f86;
+  --xq-accent-soft: rgba(42, 171, 159, 0.12);
+  --xq-accent-border: rgba(42, 171, 159, 0.28);
+  --xq-accent-ring: rgba(42, 171, 159, 0.1);
+  --xq-text: #1c2530;
+  --xq-text-secondary: #4a5568;
+  --xq-text-muted: #8b95a5;
+  --xq-border: rgba(15, 23, 42, 0.07);
+  --xq-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 20px rgba(15, 23, 42, 0.05);
+}
+
+body.dark-mode .xq-teleport {
+  --xq-surface: #252b34;
+  --xq-surface-muted: #2f3640;
+  --xq-accent: #4ecdc4;
+  --xq-accent-deep: #7ee8df;
+  --xq-accent-soft: rgba(78, 205, 196, 0.14);
+  --xq-accent-border: rgba(78, 205, 196, 0.32);
+  --xq-text: #e8edf3;
+  --xq-text-secondary: #b8c0cc;
+  --xq-text-muted: #7a8494;
+  --xq-border: rgba(255, 255, 255, 0.08);
+  --xq-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+}

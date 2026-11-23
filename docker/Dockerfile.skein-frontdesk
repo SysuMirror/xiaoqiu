@@ -1,0 +1,7 @@
+# chat + frontdesk only: replace the base image's app tree completely.
+FROM xiaoqiu:1.0.95-skein-trace
+
+COPY run.py /srv/sse-agent/run.py
+RUN rm -rf /srv/sse-agent/app
+COPY app /srv/sse-agent/app
+RUN find /srv/sse-agent/app -name __pycache__ -type d -prune -exec rm -rf {} +

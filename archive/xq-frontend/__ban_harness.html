@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>ban banner harness (dev only, never shipped)</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+const log = []
+window.__log = log
+window.__err = ''
+window.__ready = false
+try {
+  const [{ createApp, h }, { default: BanBanner }] = await Promise.all([
+    import('vue'),
+    import('/new/src/components/smart-xiaoqiu/BanBanner.vue'),
+  ])
+  await import('/new/src/assets/xq-overlay.css')
+
+  const { useUserStore } = await import('/new/src/store/userStore.ts')
+  useUserStore().setToken('harness-fake-token')
+
+  let banState = { banned: false, remaining: 0, reason: '' }
+  window.__setBan = (banned, remaining, reason) => {
+    banState = { banned, remaining, reason }
+  }
+  window.fetch = async url => {
+    if (String(url).includes('/api/v1/agent/me/ban')) {
+      await new Promise(r => setTimeout(r, 100))
+      return new Response(JSON.stringify({
+        code: 0, msg: 'ok',
+        data: {
+          banned: banState.banned,
+          remaining: banState.remaining,
+          until: banState.banned
+            ? new Date(Date.now() + banState.remaining * 1000).toISOString()
+            : null,
+          reason: banState.reason,
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ code: 403, msg: 'harness: blocked' }), { status: 403 })
+  }
+
+  const app = createApp({ render: () => h(BanBanner) })
+  app.mount('#app')
+  window.__ready = true
+  log.push('ban harness ready')
+}
+catch (e) {
+  window.__err = String((e && e.stack) || e)
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+# SSE-Agent 行为配置唯一来源（secrets 一律走 env，见 .env.example）
+
+app:
+  env: dev                      # dev | prod
+  log_level: INFO
+  timezone: Asia/Shanghai
+  default_role: user            # 无角色信息时的兜底（安全默认；本地测试用 admin token）
+
+http:
+  host: 0.0.0.0
+  port: 8100
+
+limits:
+  rate_limit_rps: 2             # 进程内令牌桶，按 user_id
+  max_concurrent_runs_per_user: 2
+  run_token_budget: 60000       # 单 run token 上限
+  sse_heartbeat_seconds: 15
+  sse_disconnect_grace_seconds: 90
+
+llm:
+  endpoints:                    # 有序，前者为主后者为备
+    - name: qwen38-awq
+      base_url: https://api.ssemarket.cn/v1
+      model: qwen-3.8-flash     # qwen3.8-27b-awq 已下架(2026-09-01);本地 .env 的 LLM_API_KEY_1 需换新通道 key(平台 models.json 持有)
+      api_key_env: LLM_API_KEY_1
+      extra_body: {"chat_template_kwargs": {"enable_thinking": false}}
+    - name: zhipu-flash         # 备用：智谱
+      base_url: https://open.bigmodel.cn/api/paas/v4
+      model: glm-4.5-flash
+      api_key_env: LLM_API_KEY_2
+      extra_body: {"thinking": {"type": "disabled"}}
+  request_timeout_seconds: 60
+  retry_attempts: 3
+  breaker_failure_threshold: 3
+  breaker_cooldown_seconds: 60
+
+database:
+  dsn_env: AGENT_PG_DSN         # postgresql://...（含 pgvector）
+
+forum_db:
+  host: 127.0.0.1               # 经 scripts/dev_tunnel.sh 隧道（-L 3506），生产收口后公网 3506 不可直连
+  port: 3506
+  user_env: FORUM_DB_USER
+  password_env: FORUM_DB_PASSWORD
+  database: ssemarket
+  statement_timeout_seconds: 3
+  max_rows: 50
+
+mail:
+  mode: log                     # log(dev, 落盘 var/mail_outbox) | smtp(prod)
+  smtp_host: smtp.163.com       # 发件邮箱的 SMTP 服务器（163/qq 各自对应）
+  smtp_port: 465
+  from_name: 小秋 · SSE Market 助手
+  recipients:
+    feedback: 2215020897@qq.com # SMTP 唯一用途：AI 整理后的用户反馈直达负责人
+    admins: ops@ssemarket.local # log 模式占位（日报用；smtp 模式下不在白名单的组自动跳过）
+
+websearch:                      # 联网搜索（chat 域 L1）
+  enabled: false                # 千帆控制台建 API Key 填入 .env 后置 true
+  provider: baidu               # baidu(千帆 AI-Search, 免费1500次/月按天发放≈50/天) | tavily(免费1000次/月)
+  base_url: https://qianfan.baidubce.com
+  api_key_env: QIANFAN_API_KEY  # 切 tavily 时: base_url=https://api.tavily.com, api_key_env=TAVILY_API_KEY
+  per_user_daily: 10
+  global_daily: 50              # 对齐千帆免费档
+
+scheduler:
+  digest_hour: 9                # 每日 09:00（Asia/Shanghai）
+  digest_minute: 0
+
+moderation:                       # 辱骂防御：粗筛+LLM 复核，24h 内两次 → 禁言+作废 token
+  enabled: true
+  mute_hours: 12                 # 禁言时长（写论坛 users.banend，Go 侧发帖/评论动作逐次检查）
+  strike_window_hours: 24        # strike 计数窗口
+  strike_threshold: 2            # 窗口内第 N 次触发禁言（1 次=仅警告注入）
+  max_bans_per_day: 10           # 日熔断：窗口内自动禁言达上限后只记录不执行（防 runaway）
+
+rag:
+  qdrant_url: http://127.0.0.1:6333       # dev 走 SSH 隧道→服务器 25033(frp→WZ8 k3s)
+  collection: g3dfc5d61_ssemarket_rag_v2   # v2：全量帖子+评论
+  embed_base_url: http://127.0.0.1:13012  # bge-m3 (1024维) 走隧道→服务器 13035（13011 老通道 2026-10-10 已死；生产直连 10.1.0.4:13035，与平台 models.json 主上游同源）
+  embed_dim: 1024
+
+go_backend:
+  container_name: server          # docker.sock 动态解析 Go 容器桥 IP 的兜底
+
+ops_guard:                       # 邮件出口（Go /internal/mail；凭据只在 Go 侧）
+  email_to: 2215020897@qq.com
+  mail_url: http://127.0.0.1:8080/internal/mail
+  mail_token_env: INTERNAL_TOKEN
+  mail_enabled: true
+
+ops_llm:                          # chat 辅助模型（会话标题/记忆抽取；智谱回落链）
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  api_key_env: OPS_LLM_API_KEY
+  models:                        # 4.5 优先：支持关思考（首token ~7s）；5.3 强制思考（17s 静默）作回落
+    - glm-4.5-flash
+    - glm-5.3-flash
+  timeout_seconds: 45
+  max_tokens: 1024
+
+forum_write:                      # v3 论坛写侧：用户 JWT 转发 Go 写 API（L3 人审 + 限频 + 审核）
+  enabled: false                  # 本地 dev 不连生产 Go；生产就地改 true
+  base_url: http://127.0.0.1:8080 # 生产 Go 回环直连
+  max_title_chars: 30
+  max_content_chars: 5000
+  partitions: [生活日常, 主页, 学习交流, 技术分享, 课程专区, 实习就业,
+               社团活动, 宿舍生活, 组团捞人, 期末资料, 其他]
+  daily_post_limit: 3
+  daily_comment_limit: 10
+  daily_like_limit: 30
+  daily_vote_limit: 30
+
+retention:                        # v3 数据生命周期（每日 04:17 清理，幂等）
+  enabled: true
+  deleted_threads_days: 30        # 软删会话 N 天后物理清除（含 checkpoints 三表）
+  runs_days: 90
+  actions_days: 365
+
+openapi:                          # v3 开放 API（X-API-Key）
+  enabled: true
+  per_minute: 30
+  daily_default: 1000
+
+auto_memory:                      # v3 自动记忆抽取（run 结束后后台 LLM 抽取稳定事实）
+  enabled: true
+  cooldown_minutes: 30
+  min_answer_chars: 80
+  max_items: 2
+
+admin:                            # v3 admin 加固：非空 = 主站 admin token 的 uid 必须在白名单
+  uid_allowlist: []
+
+skein:                    # 雁阵控制面指标（生产镜像由部署环境覆盖）
+  enabled: false
+  base_url: http://172.17.0.1:7800
+  token_env: SKEIN_TOKEN
+  scrape_seconds: 30
+  prune_days: 3

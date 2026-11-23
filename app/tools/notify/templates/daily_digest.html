@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh">
+<body style="font-family: sans-serif; max-width: 640px; margin: 0 auto;">
+  <h2>SSE Market 每日论坛日报</h2>
+  <p>{{ date }}</p>
+
+  <h3>昨日概览</h3>
+  <ul>
+    <li>新帖：{{ new_posts }}</li>
+    <li>总浏览增量：{{ total_browse }}</li>
+  </ul>
+
+  <h3>热门帖子 TOP{{ hot|length }}</h3>
+  <ol>
+  {% for p in hot %}
+    <li><a href="https://ssemarket.cn/new/postdetail/{{ p.postID }}">{{ p.title }}</a>
+        （浏览 {{ p.browse_num }} / 赞 {{ p.like_num }}）</li>
+  {% endfor %}
+  </ol>
+
+  <p style="color: #888; font-size: 12px;">由小秋自动生成 · {{ generated_at }}</p>
+</body>
+</html>

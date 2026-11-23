@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>rps harness (dev only, never shipped)</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+const log = []
+window.__log = log
+window.__err = ''
+window.__ready = false
+try {
+  const [{ createApp, h }, { default: RpsGame }] = await Promise.all([
+    import('vue'),
+    import('/new/src/components/smart-xiaoqiu/RpsGame.vue'),
+  ])
+  await import('/new/src/assets/xq-overlay.css')
+
+  const app = createApp({ render: () => h(RpsGame, { onClose: () => { window.__closed = true } }) })
+  const { useUserStore } = await import('/new/src/store/userStore.ts')
+  const store = useUserStore()
+  store.setToken('harness-fake-token')
+  window.__store = store
+
+  const losePayload = sec => ({
+    code: 0, msg: 'ok',
+    data: {
+      user_move: 'rock', ai_move: 'paper', result: 'lose',
+      ban: { banned: true, seconds: sec, until: new Date(Date.now() + sec * 1000).toISOString() },
+      note: '封号 5 分钟已执行（当前登录态保留，期间无法重新登录）',
+    },
+  })
+  const winPayload = {
+    code: 0, msg: 'ok',
+    data: { user_move: 'rock', ai_move: 'scissors', result: 'win', ban: null, note: '' },
+  }
+  const drawPayload = {
+    code: 0, msg: 'ok',
+    data: { user_move: 'rock', ai_move: 'rock', result: 'draw', ban: null, note: '' },
+  }
+  const statsPayload = (w, l, d, b) => ({
+    code: 0, msg: 'ok',
+    data: {
+      me: { wins: w, losses: l, draws: d, bans: b },
+      global: { games: 1234, bans: 56 },
+      recent: [],
+    },
+  })
+
+  let caseName = 'win'
+  window.__setCase = n => { caseName = n }
+  window.fetch = async (url, opts) => {
+    const u = String(url)
+    if (u.includes('/api/v1/agent/game/rps/stats'))
+      return new Response(JSON.stringify(statsPayload(3, 5, 2, 2)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (u.includes('/api/v1/agent/game/rps')) {
+      await new Promise(r => setTimeout(r, 120))
+      const body = caseName === 'lose' ? losePayload(300)
+        : caseName === 'release' ? losePayload(6)
+          : caseName === 'draw' ? drawPayload : winPayload
+      return new Response(JSON.stringify(body),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ code: 403, msg: 'harness: blocked' }), { status: 403 })
+  }
+
+  app.mount('#app')
+  window.__ready = true
+  log.push('harness ready')
+}
+catch (e) {
+  window.__err = String((e && e.stack) || e)
+}
+</script>
+</body>
+</html>

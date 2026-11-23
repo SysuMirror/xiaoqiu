@@ -1,0 +1,12 @@
+{
+ "clean": "{\"open\":true,\"inviteHidden\":true}",
+ "win": "{\"winVerdict\":true,\"noReward\":true,\"replayEnabled\":true}",
+ "freshLose": "{\"verdict\":true,\"countdownOk\":true}",
+ "invite": "{\"shown\":true,\"headOk\":true,\"ruleOk\":true}",
+ "invite270": "{\"invite\":true}",
+ "commute": "{\"verdictOk\":true,\"remainOk\":true,\"againOk\":true}",
+ "release": "{\"verdictOk\":true}",
+ "extend": "{\"verdictOk\":true,\"remainOk\":true,\"tauntOk\":true}",
+ "none": "{\"verdictOk\":true,\"remainOk\":true}",
+ "consoleErrors": []
+}

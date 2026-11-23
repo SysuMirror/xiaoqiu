@@ -1,0 +1,955 @@
+services:
+- id: go_api
+  name: api
+  kind: service
+  domain: 工作台/平台
+  code:
+  - api/api.go
+  routes:
+  - POST /api/auth/apiTest
+  routes_detail:
+  - m: POST
+    p: /api/auth/apiTest
+    h: ApiTest
+- id: go_chat
+  name: chat
+  kind: service
+  domain: 社区
+  code:
+  - controller/chat.go
+  routes:
+  - GET /websocket/auth/chat
+  - GET /api/auth/leaveChatView
+  - GET /api/auth/getChatHistory
+  - GET /api/auth/getChatNotice
+  - POST /api/auth/recallChatMessage
+  routes_detail:
+  - m: GET
+    p: /websocket/auth/chat
+    h: ChatHandler
+  - m: GET
+    p: /api/auth/leaveChatView
+    h: LeaveChatView
+  - m: GET
+    p: /api/auth/getChatHistory
+    h: GetChatHistory
+  - m: GET
+    p: /api/auth/getChatNotice
+    h: GetChatNotice
+  - m: POST
+    p: /api/auth/recallChatMessage
+    h: RecallChatMessage
+  code_upstream:
+  - service/chat_service.go
+  transport: websocket（长连接 /websocket/auth/chat）
+- id: go_comment
+  name: commentController
+  kind: service
+  domain: 评论
+  code:
+  - controller/commentController.go
+  routes:
+  - POST api/auth/showPcomments
+  - POST api/auth/postPcomment
+  - POST api/auth/postCcomment
+  - POST api/auth/updateCcommentLike
+  - POST api/auth/updatePcommentLike
+  - POST api/auth/updateCcommentDeny
+  - POST api/auth/updatePcommentDeny
+  - POST /api/auth/resolveMentions
+  - POST /api/auth/deletePcomment
+  - POST /api/auth/deleteCcomment
+  routes_detail:
+  - m: POST
+    p: api/auth/showPcomments
+    h: GetComments
+  - m: POST
+    p: api/auth/postPcomment
+    h: PostPcomment
+  - m: POST
+    p: api/auth/postCcomment
+    h: PostCcomment
+  - m: POST
+    p: api/auth/updateCcommentLike
+    h: UpdateCcommentLike
+  - m: POST
+    p: api/auth/updatePcommentLike
+    h: UpdatePcommentLike
+  - m: POST
+    p: api/auth/updateCcommentDeny
+    h: UpdateCcommentDeny
+  - m: POST
+    p: api/auth/updatePcommentDeny
+    h: UpdatePcommentDeny
+  - m: POST
+    p: /api/auth/resolveMentions
+    h: ResolveMentions
+  - m: POST
+    p: /api/auth/deletePcomment
+    h: DeletePcomment
+  - m: POST
+    p: /api/auth/deleteCcomment
+    h: DeleteCcomment
+  code_upstream:
+  - service/comment_service.go
+- id: go_file
+  name: fileController
+  kind: service
+  domain: 文件
+  code:
+  - controller/fileController.go
+  routes:
+  - POST /api/auth/getFileList
+  - POST /api/auth/fileDelete
+  - POST /api/auth/folderDelete
+  - POST /api/auth/uploadFile
+  - POST /api/auth/addFolder
+  - POST /api/auth/getObjectUrl
+  routes_detail:
+  - m: POST
+    p: /api/auth/getFileList
+    h: GetFileList
+  - m: POST
+    p: /api/auth/fileDelete
+    h: DeleteFile
+  - m: POST
+    p: /api/auth/folderDelete
+    h: DeleteFolder
+  - m: POST
+    p: /api/auth/uploadFile
+    h: TeachUpload
+  - m: POST
+    p: /api/auth/addFolder
+    h: AddFolder
+  - m: POST
+    p: /api/auth/getObjectUrl
+    h: GetObjectUrl
+- id: go_health
+  name: health
+  kind: service
+  domain: 平台与系统
+  code:
+  - controller/health.go
+  routes:
+  - GET /health
+  - GET /ready
+  routes_detail:
+  - m: GET
+    p: /health
+    h: Health
+  - m: GET
+    p: /ready
+    h: Ready
+- id: go_internal_mail
+  name: internal_mail
+  kind: service
+  domain: 平台与系统
+  code:
+  - controller/internal_mail.go
+  routes:
+  - POST /internal/mail
+  routes_detail:
+  - m: POST
+    p: /internal/mail
+    h: InternalMail
+- id: go_lottery
+  name: lottery_controller
+  kind: service
+  domain: 运营活动
+  code:
+  - controller/lottery_controller.go
+  routes:
+  - POST /api/auth/lottery/create
+  - POST /api/auth/lottery/detail
+  - POST /api/auth/lottery/participate
+  - POST /api/auth/lottery/checkParticipated
+  routes_detail:
+  - m: POST
+    p: /api/auth/lottery/create
+    h: LotteryCreate
+  - m: POST
+    p: /api/auth/lottery/detail
+    h: LotteryDetail
+  - m: POST
+    p: /api/auth/lottery/participate
+    h: LotteryParticipate
+  - m: POST
+    p: /api/auth/lottery/checkParticipated
+    h: LotteryCheckParticipated
+  code_upstream:
+  - service/lottery_service.go
+- id: go_manager
+  name: managerController
+  kind: service
+  domain: 管理端
+  code:
+  - controller/managerController.go
+  routes:
+  - POST /api/auth/adminLogin
+  routes_detail:
+  - m: POST
+    p: /api/auth/adminLogin
+    h: AdminLogin
+- id: go_music
+  name: musicController
+  kind: service
+  domain: 音乐
+  code:
+  - controller/musicController.go
+  routes:
+  - POST /api/auth/uploadMusic
+  - POST /api/auth/publishMusic
+  - POST /api/auth/getMusicList
+  - POST /api/auth/deleteMusic
+  - POST /api/auth/musicPlayed
+  - GET /api/music/file/:musicID
+  - GET /api/music/cover/:musicID
+  routes_detail:
+  - m: POST
+    p: /api/auth/uploadMusic
+    h: UploadMusic
+  - m: POST
+    p: /api/auth/publishMusic
+    h: PublishMusic
+  - m: POST
+    p: /api/auth/getMusicList
+    h: GetMusicList
+  - m: POST
+    p: /api/auth/deleteMusic
+    h: DeleteMusic
+  - m: POST
+    p: /api/auth/musicPlayed
+    h: MusicPlayed
+  - m: GET
+    p: /api/music/file/:musicID
+    h: MusicFile
+  - m: GET
+    p: /api/music/cover/:musicID
+    h: MusicCover
+- id: go_notice
+  name: noticeController
+  kind: service
+  domain: 公告
+  code:
+  - controller/noticeController.go
+  routes:
+  - GET /api/auth/getNotice
+  - GET /api/auth/getNoticeNum
+  - PATCH api/auth/readNotice/:noticeID
+  routes_detail:
+  - m: GET
+    p: /api/auth/getNotice
+    h: GetNotice
+  - m: GET
+    p: /api/auth/getNoticeNum
+    h: GetNoticeNum
+  - m: PATCH
+    p: api/auth/readNotice/:noticeID
+    h: ReadNotice
+  code_upstream:
+  - service/notice_service.go
+- id: go_post
+  name: postController
+  kind: service
+  domain: 帖子
+  code:
+  - controller/postController.go
+  routes:
+  - POST /api/auth/post
+  - POST /api/auth/browse
+  - POST /api/auth/pinPost
+  - POST /api/auth/unpinPost
+  - POST /api/auth/userProfilePosts
+  - POST /api/auth/userProfilePostNum
+  - POST /api/auth/getPostNum
+  - POST /api/auth/updateLike
+  - POST /api/auth/showDetails
+  - POST /api/auth/updateSave
+  - POST /api/auth/toggleWatch
+  - POST /api/auth/updateBrowseNum
+  - POST /api/auth/updatePostPrivacy
+  - POST /api/auth/deletePost
+  - POST /api/auth/submitReport
+  - POST /api/auth/uploadPhotos
+  - POST /api/auth/uploadZip
+  - POST /api/auth/submitFeedback
+  - GET /api/auth/getAllFeedback
+  - GET /api/auth/calculateHeat
+  - GET /api/auth/getTags
+  - POST /api/auth/gettitle
+  routes_detail:
+  - m: POST
+    p: /api/auth/post
+    h: Post
+  - m: POST
+    p: /api/auth/browse
+    h: Browse
+  - m: POST
+    p: /api/auth/pinPost
+    h: PinPost
+  - m: POST
+    p: /api/auth/unpinPost
+    h: UnpinPost
+  - m: POST
+    p: /api/auth/userProfilePosts
+    h: UserProfilePosts
+  - m: POST
+    p: /api/auth/userProfilePostNum
+    h: UserProfilePostNum
+  - m: POST
+    p: /api/auth/getPostNum
+    h: GetPostNum
+  - m: POST
+    p: /api/auth/updateLike
+    h: UpdateLike
+  - m: POST
+    p: /api/auth/showDetails
+    h: ShowDetails
+  - m: POST
+    p: /api/auth/updateSave
+    h: UpdateSave
+  - m: POST
+    p: /api/auth/toggleWatch
+    h: ToggleWatch
+  - m: POST
+    p: /api/auth/updateBrowseNum
+    h: UpdateBrowseNum
+  - m: POST
+    p: /api/auth/updatePostPrivacy
+    h: UpdatePostPrivacy
+  - m: POST
+    p: /api/auth/deletePost
+    h: DeletePost
+  - m: POST
+    p: /api/auth/submitReport
+    h: SubmitReport
+  - m: POST
+    p: /api/auth/uploadPhotos
+    h: UploadPhotos
+  - m: POST
+    p: /api/auth/uploadZip
+    h: UploadZip
+  - m: POST
+    p: /api/auth/submitFeedback
+    h: SubmitFeedback
+  - m: GET
+    p: /api/auth/getAllFeedback
+    h: GetAllFeedback
+  - m: GET
+    p: /api/auth/calculateHeat
+    h: CalculateHeat
+  - m: GET
+    p: /api/auth/getTags
+    h: GetTags
+  - m: POST
+    p: /api/auth/gettitle
+    h: GetTitle
+  code_upstream:
+  - service/post_service.go
+- id: go_quest
+  name: quest_controller
+  kind: service
+  domain: 运营活动
+  code:
+  - controller/quest_controller.go
+  routes:
+  - POST /api/auth/quest/list
+  - POST /api/auth/quest/detail
+  - POST /api/auth/quest/create
+  - POST /api/auth/quest/updateStatus
+  - GET /api/auth/quest/me
+  - GET /api/auth/quest/chatPeers
+  routes_detail:
+  - m: POST
+    p: /api/auth/quest/list
+    h: QuestList
+  - m: POST
+    p: /api/auth/quest/detail
+    h: QuestDetail
+  - m: POST
+    p: /api/auth/quest/create
+    h: QuestCreate
+  - m: POST
+    p: /api/auth/quest/updateStatus
+    h: QuestUpdateStatus
+  - m: GET
+    p: /api/auth/quest/me
+    h: QuestMe
+  - m: GET
+    p: /api/auth/quest/chatPeers
+    h: QuestChatPeers
+  code_upstream:
+  - service/quest_service.go
+- id: go_rating
+  name: rating_controller
+  kind: service
+  domain: 运营活动
+  code:
+  - controller/rating_controller.go
+  routes:
+  - POST /api/auth/rating/category/list
+  - POST /api/auth/rating/category/create
+  - POST /api/auth/rating/post/list
+  - POST /api/auth/rating/post/count
+  - POST /api/auth/rating/post/create
+  - POST /api/auth/rating/post/detail
+  - POST /api/auth/rating/post/delete
+  - POST /api/auth/rating/post/like
+  - POST /api/auth/rating/star/submit
+  - POST /api/auth/rating/comment/list
+  - POST /api/auth/rating/comment/create
+  - POST /api/auth/rating/comment/like
+  routes_detail:
+  - m: POST
+    p: /api/auth/rating/category/list
+    h: RatingCategoryList
+  - m: POST
+    p: /api/auth/rating/category/create
+    h: RatingCategoryCreate
+  - m: POST
+    p: /api/auth/rating/post/list
+    h: RatingPostList
+  - m: POST
+    p: /api/auth/rating/post/count
+    h: RatingPostCount
+  - m: POST
+    p: /api/auth/rating/post/create
+    h: RatingPostCreate
+  - m: POST
+    p: /api/auth/rating/post/detail
+    h: RatingPostDetail
+  - m: POST
+    p: /api/auth/rating/post/delete
+    h: RatingPostDelete
+  - m: POST
+    p: /api/auth/rating/post/like
+    h: RatingPostLike
+  - m: POST
+    p: /api/auth/rating/star/submit
+    h: RatingStarSubmit
+  - m: POST
+    p: /api/auth/rating/comment/list
+    h: RatingCommentList
+  - m: POST
+    p: /api/auth/rating/comment/create
+    h: RatingCommentCreate
+  - m: POST
+    p: /api/auth/rating/comment/like
+    h: RatingCommentLike
+  code_upstream:
+  - service/rating_service.go
+- id: go_resume
+  name: resumeController
+  kind: service
+  domain: 简历
+  code:
+  - controller/resumeController.go
+  routes:
+  - POST /api/auth/resume/upload
+  - POST /api/auth/resume/list
+  - POST /api/auth/resume/detail
+  - POST /api/auth/resume/download
+  - POST /api/auth/resume/preview
+  - GET /api/auth/resume/preview/stream/:resumeID
+  - POST /api/auth/resume/update
+  - POST /api/auth/resume/delete
+  routes_detail:
+  - m: POST
+    p: /api/auth/resume/upload
+    h: ResumeUpload
+  - m: POST
+    p: /api/auth/resume/list
+    h: ResumeList
+  - m: POST
+    p: /api/auth/resume/detail
+    h: ResumeDetail
+  - m: POST
+    p: /api/auth/resume/download
+    h: ResumeDownload
+  - m: POST
+    p: /api/auth/resume/preview
+    h: ResumePreview
+  - m: GET
+    p: /api/auth/resume/preview/stream/:resumeID
+    h: ResumePreviewStream
+  - m: POST
+    p: /api/auth/resume/update
+    h: ResumeUpdate
+  - m: POST
+    p: /api/auth/resume/delete
+    h: ResumeDelete
+  code_upstream:
+  - service/resume_service.go
+- id: go_shop
+  name: shopController
+  kind: service
+  domain: 运营活动
+  code:
+  - controller/shopController.go
+  routes:
+  - POST /api/auth/postProduct
+  - POST /api/auth/getProducts
+  - POST /api/auth/getProductDetail
+  - POST /api/auth/getProductNum
+  - POST /api/auth/deleteProduct
+  - POST /api/auth/saleProduct
+  - POST /api/auth/getCarouselImg
+  routes_detail:
+  - m: POST
+    p: /api/auth/postProduct
+    h: PostProduct
+  - m: POST
+    p: /api/auth/getProducts
+    h: GetProducts
+  - m: POST
+    p: /api/auth/getProductDetail
+    h: GetProductDetail
+  - m: POST
+    p: /api/auth/getProductNum
+    h: GetProductNum
+  - m: POST
+    p: /api/auth/deleteProduct
+    h: DeleteProduct
+  - m: POST
+    p: /api/auth/saleProduct
+    h: SaleProduct
+  - m: POST
+    p: /api/auth/getCarouselImg
+    h: GetCarouselImg
+  code_upstream:
+  - service/shop_service.go
+- id: go_sso
+  name: ssoController
+  kind: service
+  domain: 用户
+  code:
+  - controller/ssoController.go
+  routes:
+  - GET /api/sso/login
+  - GET /api/sso/callback
+  - POST /api/sso/exchange
+  - POST /api/sso/bind
+  - POST /api/sso/mirror/provision
+  - POST /api/sso/bind/start
+  - GET /api/sso/status
+  - POST /api/sso/unbind
+  routes_detail:
+  - m: GET
+    p: /api/sso/login
+    h: SsoLogin
+  - m: GET
+    p: /api/sso/callback
+    h: SsoCallback
+  - m: POST
+    p: /api/sso/exchange
+    h: SsoExchange
+  - m: POST
+    p: /api/sso/bind
+    h: SsoBind
+  - m: POST
+    p: /api/sso/mirror/provision
+    h: MirrorProvision
+  - m: POST
+    p: /api/sso/bind/start
+    h: SsoBindStart
+  - m: GET
+    p: /api/sso/status
+    h: SsoStatus
+  - m: POST
+    p: /api/sso/unbind
+    h: SsoUnbind
+  code_upstream:
+  - service/sso_service.go
+- id: go_user
+  name: userController
+  kind: service
+  domain: 用户
+  code:
+  - controller/userController.go
+  routes:
+  - POST /api/auth/connect/check
+  - POST /api/auth/connect/authorize
+  - POST /api/auth/connect/token
+  - POST /api/auth/connect/userinfo
+  - GET /api/auth/connect/records
+  - POST /api/auth/register
+  - POST /api/auth/login
+  - POST /api/auth/refresh
+  - POST /api/auth/deleteMe
+  - GET /api/auth/info
+  - POST /api/auth/uploadAvatar
+  - POST /api/auth/updateAvatar
+  - POST /api/auth/getAvatar
+  - POST /api/auth/getInfo
+  - POST /api/auth/updateUserInfo
+  - POST /api/auth/modifyPassword
+  - POST /api/auth/validateEmail
+  - POST /api/auth/modifyEmail
+  - POST /api/auth/identityValidate
+  - POST /api/auth/changeEmailPush
+  - POST api/auth/statistics
+  routes_detail:
+  - m: POST
+    p: /api/auth/connect/check
+    h: CheckOAuth2App
+  - m: POST
+    p: /api/auth/connect/authorize
+    h: AuthorizeOAuth2App
+  - m: POST
+    p: /api/auth/connect/token
+    h: GetTokenbyOAuth2
+  - m: POST
+    p: /api/auth/connect/userinfo
+    h: GetInfobyOAuth2
+  - m: GET
+    p: /api/auth/connect/records
+    h: GetOAuth2AuthRecords
+  - m: POST
+    p: /api/auth/register
+    h: Register
+  - m: POST
+    p: /api/auth/login
+    h: Login
+  - m: POST
+    p: /api/auth/refresh
+    h: RefreshToken
+  - m: POST
+    p: /api/auth/deleteMe
+    h: DeleteMe
+  - m: GET
+    p: /api/auth/info
+    h: Info
+  - m: POST
+    p: /api/auth/uploadAvatar
+    h: UploadAvatar
+  - m: POST
+    p: /api/auth/updateAvatar
+    h: UpdateAvatar
+  - m: POST
+    p: /api/auth/getAvatar
+    h: GetAvatar
+  - m: POST
+    p: /api/auth/getInfo
+    h: GetInfo
+  - m: POST
+    p: /api/auth/updateUserInfo
+    h: UpdateUserInfo
+  - m: POST
+    p: /api/auth/modifyPassword
+    h: ModifyPassword
+  - m: POST
+    p: /api/auth/validateEmail
+    h: ValidateEmail
+  - m: POST
+    p: /api/auth/modifyEmail
+    h: ModifyEmail
+  - m: POST
+    p: /api/auth/identityValidate
+    h: IdentityValidate
+  - m: POST
+    p: /api/auth/changeEmailPush
+    h: ChangeEmailPushStatus
+  - m: POST
+    p: api/auth/statistics
+    h: GetStatistics
+  code_upstream:
+  - service/user_service.go
+- id: go_user_api_token
+  name: user_api_token
+  kind: service
+  domain: 用户
+  code:
+  - controller/user_api_token.go
+  routes:
+  - GET /api/auth/token/scopes
+  - POST /api/auth/token/create
+  - GET /api/auth/token/list
+  - POST /api/auth/token/revoke
+  - POST /api/auth/token/delete
+  routes_detail:
+  - m: GET
+    p: /api/auth/token/scopes
+    h: ListAPITokenScopes
+  - m: POST
+    p: /api/auth/token/create
+    h: CreateAPIToken
+  - m: GET
+    p: /api/auth/token/list
+    h: ListAPITokens
+  - m: POST
+    p: /api/auth/token/revoke
+    h: RevokeAPIToken
+  - m: POST
+    p: /api/auth/token/delete
+    h: DeleteAPIToken
+- id: go_vote
+  name: voteController
+  kind: service
+  domain: 运营活动
+  code:
+  - controller/voteController.go
+  routes:
+  - POST /api/auth/searchPostsByTitle
+  - POST /api/auth/submitVote
+  - GET /api/auth/voteRanking
+  - GET /api/auth/postRanking
+  - GET /api/auth/userRanking
+  - POST /api/auth/checkUserVoted
+  routes_detail:
+  - m: POST
+    p: /api/auth/searchPostsByTitle
+    h: SearchPostsByTitle
+  - m: POST
+    p: /api/auth/submitVote
+    h: SubmitVote
+  - m: GET
+    p: /api/auth/voteRanking
+    h: GetVoteRanking
+  - m: GET
+    p: /api/auth/postRanking
+    h: GetPostRanking
+  - m: GET
+    p: /api/auth/userRanking
+    h: GetUserRanking
+  - m: POST
+    p: /api/auth/checkUserVoted
+    h: CheckUserVoted
+  code_upstream:
+  - service/vote_service.go
+- id: go_workbench
+  name: workbench_controller
+  kind: service
+  domain: 工作台/平台
+  code:
+  - controller/workbench_controller.go
+  routes:
+  - GET /api/auth/workbench/apps
+  routes_detail:
+  - m: GET
+    p: /api/auth/workbench/apps
+    h: WorkbenchAppPublicList
+  code_upstream:
+  - service/workbench_service.go
+pipeline:
+- id: mw_requestid
+  name: RequestID
+  code:
+  - middleware/
+- id: mw_attachrequestidtospan
+  name: AttachRequestIDToSpan
+  code:
+  - middleware/
+- id: mw_prometheusmetrics
+  name: PrometheusMetrics
+  code:
+  - middleware/
+- id: mw_loggertofile
+  name: LoggerToFile
+  code:
+  - middleware/
+- id: mw_corsmiddleware
+  name: CORSMiddleware
+  code:
+  - middleware/
+- id: mw_auth_groups
+  name: Auth(Strict/Optional/OAuth) + BloomFilter + 登录限流
+  code:
+  - middleware/authMiddleware.go
+  - middleware/strict_auth.go
+  - middleware/oauthMiddleware.go
+  - middleware/user_session.go
+  - middleware/login_rate_limit.go
+  note: 路由组级挂载（routes.go：auth=Strict+Bloom / noauth=Optional / oauth=OAuth）
+layers:
+- id: svc_layer
+  name: service 层
+  kind: layer
+  code:
+  - service/
+  note: 业务逻辑；缓存调用集中于此
+- id: repo_layer
+  name: repository 层
+  kind: layer
+  code:
+  - repository/
+  note: gorm 数据访问唯一出口
+- id: model_layer
+  name: model / domain
+  kind: layer
+  code:
+  - model/
+  - domain/
+  note: 实体定义
+- id: cache_layer
+  name: cache（L1 内存 + L2 Redis）
+  kind: layer
+  code:
+  - cache/
+  note: Cache-Aside；L1 逻辑过期可选，L2 Redis 物理 TTL(含 jitter)
+- id: mq_layer
+  name: mq（Redis 延迟队列）
+  kind: layer
+  code:
+  - mq/
+  note: 帖子归档延迟 1h：ZSet 时间索引 + Hash payload；失败重试 3 次进死信
+cache_profiles:
+- var: ProfilePostDetail
+  name: post_detail
+  domain: 帖子
+  l1_ttl: 5min
+  l2_ttl: 30min
+  logical_expire: true
+- var: ProfileCommentList
+  name: comment_list
+  domain: 评论
+  l1_ttl: 3min
+  l2_ttl: 15min
+  logical_expire: false
+- var: ProfileHomeBrowse
+  name: home_browse
+  domain: 首页
+  l1_ttl: 1min
+  l2_ttl: 5min
+  logical_expire: false
+- var: ProfilePublicFeed
+  name: public_feed
+  domain: 首页
+  l1_ttl: 1min
+  l2_ttl: 5min
+  logical_expire: true
+- var: ProfileUserInfo
+  name: user_info
+  domain: 用户
+  l1_ttl: 10min
+  l2_ttl: 1h
+  logical_expire: false
+- var: ProfileHotPostList
+  name: hot_post_list
+  domain: 首页
+  l1_ttl: 5min
+  l2_ttl: 30min
+  logical_expire: false
+jobs:
+- id: job_heat
+  name: heat.StartHeat
+  kind: job
+  code:
+  - heat/
+  note: 热度计算（定时）
+  heartbeat: 未接入
+- id: job_lottery
+  name: lottery.StartAutoDraw
+  kind: job
+  code:
+  - lottery/
+  note: 抽奖自动开奖
+  heartbeat: 未接入
+- id: job_pin
+  name: pin.StartClearExpired
+  kind: job
+  code:
+  - pin/
+  note: 置顶过期清理
+  heartbeat: 未接入
+infra:
+- id: gateway
+  name: nginx 反代
+  kind: infra
+  code:
+  - nginx_proxy/nginx.conf
+- id: go_server
+  name: Go 后端容器
+  kind: infra
+  code:
+  - main.go
+- id: mysql
+  name: 论坛 MySQL
+  kind: store
+  code:
+  - common/database.go
+- id: redis
+  name: Redis
+  kind: store
+  code: []
+  note: 双角色：缓存 L2 + 归档延迟队列；不可用时缓存退化回源 MySQL、归档延迟
+- id: cos
+  name: 腾讯云 COS
+  kind: external
+  code:
+  - api/cosBucket.go
+  note: 音乐文件双写备份（本地盘为主）
+- id: server_task
+  name: 归档消费端 server-task
+  kind: external
+  code: []
+  note: 独立 Python 服务（sse_market_toiwiki_server-task）：30s 消费 Redis 延迟队列
+- id: agent_hook
+  name: 小秋（raghook）
+  kind: external
+  code:
+  - controller/raghook.go
+  note: 发帖/删帖/转私密 webhook
+data_assets:
+- id: mysql_data
+  store: MySQL ssemarket
+  what: 论坛核心表：posts/pcomments/users 等
+  backup: mysqldump 定时（main.go 内置备份逻辑）
+- id: music_local
+  store: 本地盘 sse_market_server_resource
+  what: 音乐文件/封面（主存储）+ uploads
+  backup: bind-mount 目录，容器重建不丢
+- id: music_cos
+  store: 腾讯云 COS src/music/**
+  what: 音乐双写备份（2026-09 上线）
+  backup: 对象存储版本化
+- id: agent_pg
+  store: Agent PostgreSQL
+  what: 小秋状态：checkpoint/记忆/台账/遥测
+  backup: 每日 pg_dump
+- id: redis_data
+  store: Redis
+  what: 缓存(L2)+归档延迟队列
+  backup: 可重建（非资产，标注）
+edges:
+- - gateway
+  - go_server
+  - 请求
+- - svc_layer
+  - repo_layer
+  - 读写
+- - repo_layer
+  - mysql
+  - SQL
+- - svc_layer
+  - cache_layer
+  - cache-aside
+- - cache_layer
+  - redis
+  - L2 读写
+- - cache_layer
+  - mysql
+  - miss 回源
+- - svc_layer
+  - mq_layer
+  - 归档入队
+- - mq_layer
+  - redis
+  - ZSet+Hash
+- - redis
+  - server_task
+  - 30s 消费
+- - go_server
+  - svc_layer
+  - 调用
+- - ops_agent
+  - go_server
+  - 控制
+control:
+  id: ops_agent
+  name: 小秋（控制面）
+  kind: control
+  actions:
+  - status(L1)
+  - logs(L1)
+  - restart(L3·HITL)
+  - raghook(被动)

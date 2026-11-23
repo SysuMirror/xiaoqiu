@@ -1,0 +1,20 @@
+# 生产部署（在 SSE_Market 服务器上）。开发环境不用这个文件。
+services:
+  sse-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: sse-agent:latest
+    container_name: sse_agent
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100"      # 只绑本机，走 nginx 反代对外
+    env_file: ../.env              # secrets only（LLM key/DB DSN/JWT/SMTP）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 注意：DSN 指向 sse_agent_pg。同机容器网络时建议直接用服务名；
+    # MVP 复用宿主机 127.0.0.1:5433（容器内用 host.docker.internal:5433）。
+    environment:
+      - AGENT_PG_DSN=postgresql://agent:agent@host.docker.internal:5433/sse_agent
+    volumes:
+      - ../var:/srv/sse-agent/var  # log 模式邮件落盘等

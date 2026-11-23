@@ -1,0 +1,8 @@
+{
+ "clean": "{\"hidden\":true}",
+ "bannedShort": "{\"shown\":true,\"teleported\":true,\"textOk\":true,\"reasonOk\":true,\"fmt\":true,\"pointerEvents\":\"none\",\"zIndex\":\"2500\"}",
+ "ticking": "{\"decreasing\":true,\"text\":\"你已被封禁，1:27后解封，期间无法重新登录 原因：猜拳输给了小秋账号已封禁，期间无法重新登录，请等待解封\"}",
+ "longFmt": "{\"hms\":true,\"reasonOk\":true}",
+ "released": "{\"pillGone\":true,\"toastShown\":true}",
+ "consoleErrors": []
+}

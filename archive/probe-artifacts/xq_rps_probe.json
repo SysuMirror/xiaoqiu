@@ -1,0 +1,11 @@
+{
+ "modal": "{\"open\":true,\"teleported\":true,\"moveCount\":3,\"moveLabels\":[\"出石头\",\"出剪刀\",\"出布\"],\"subtitle\":\"赢了没奖励 · 输了封号 5 分钟\",\"ruleOk\":true,\"statsOk\":true,\"focusOnMove\":true}",
+ "win": "{\"verdict\":true,\"hasRewardLine\":true,\"revealOk\":true,\"replayEnabled\":true}",
+ "draw": "{\"verdict\":true}",
+ "lose": "{\"verdict\":true,\"countdown5m\":true,\"noteOk\":true,\"replayDisabled\":true,\"replayLabel\":\"服刑中（剩 4:59）\"}",
+ "countdownTick": "{\"ticking\":true,\"text\":\"你输了。封号 4:57\"}",
+ "releaseShort": "{\"countdown\":\" 你输了。封号 0:05\"}",
+ "released": "{\"freeLine\":true,\"replayEnabled\":true}",
+ "escClose": "{\"closedFlag\":true}",
+ "consoleErrors": []
+}

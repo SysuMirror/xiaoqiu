@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>rps harness v3 (dev only, never shipped)</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+const log = []
+window.__log = log
+window.__err = ''
+window.__ready = false
+try {
+  const [{ createApp, h }, { default: RpsGame }] = await Promise.all([
+    import('vue'),
+    import('/new/src/components/smart-xiaoqiu/RpsGame.vue'),
+  ])
+  await import('/new/src/assets/xq-overlay.css')
+
+  const { useUserStore } = await import('/new/src/store/userStore.ts')
+  useUserStore().setToken('harness-fake-token')
+
+  // 初始封禁状态走 URL 参数（mount 时读取一次）：?ban=<秒>
+  const preBan = Number(new URLSearchParams(location.search).get('ban') || 0)
+
+  const losePayload = (sec, note) => ({
+    code: 0, msg: 'ok',
+    data: {
+      user_move: 'rock', ai_move: 'paper', result: 'lose',
+      ban: { banned: true, seconds: 300, until: new Date(Date.now() + sec * 1000).toISOString() },
+      sentence: null, remaining_after: sec,
+      note: note || '封号 5 分钟已执行（当前登录态保留，期间无法重新登录）',
+    },
+  })
+  const winPayload = (sentence, after) => ({
+    code: 0, msg: 'ok',
+    data: {
+      user_move: 'rock', ai_move: 'scissors', result: 'win',
+      ban: null, sentence, remaining_after: after, note: '',
+    },
+  })
+  const drawPayload = (sentence, after) => ({
+    code: 0, msg: 'ok',
+    data: {
+      user_move: 'rock', ai_move: 'rock', result: 'draw',
+      ban: null, sentence, remaining_after: after, note: '',
+    },
+  })
+  const statsPayload = (w, l, d, b) => ({
+    code: 0, msg: 'ok',
+    data: {
+      me: { wins: w, losses: l, draws: d, bans: b },
+      global: { games: 1234, bans: 56 },
+      recent: [],
+    },
+  })
+
+  let caseName = 'win'
+  window.__setCase = n => { caseName = n }
+  window.fetch = async url => {
+    const u = String(url)
+    if (u.includes('/api/v1/agent/me/ban'))
+      return new Response(JSON.stringify({
+        code: 0, msg: 'ok',
+        data: {
+          banned: preBan > 0, remaining: preBan,
+          until: preBan > 0 ? new Date(Date.now() + preBan * 1000).toISOString() : null,
+          reason: preBan > 0 ? '猜拳输给了小秋' : '',
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (u.includes('/api/v1/agent/game/rps/stats'))
+      return new Response(JSON.stringify(statsPayload(3, 5, 2, 2)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (u.includes('/api/v1/agent/game/rps')) {
+      await new Promise(r => setTimeout(r, 100))
+      let body
+      switch (caseName) {
+        case 'draw':
+          body = drawPayload(null, 0); break
+        case 'lose':
+          body = losePayload(300); break
+        case 'invite':
+          body = drawPayload({ mode: 'none', changed_seconds: 0, remaining_after: 360 }, 360); break
+        case 'commute':
+          body = winPayload({ mode: 'commute', changed_seconds: 300, remaining_after: 240 }, 240); break
+        case 'extend':
+          body = losePayload(480, '减刑局输了：刑期 +5 分钟')
+          body.data.sentence = { mode: 'extend', changed_seconds: 300, remaining_after: 480 }
+          break
+        case 'none':
+          body = drawPayload({ mode: 'none', changed_seconds: 0, remaining_after: 300 }, 300); break
+        case 'release':
+          body = winPayload({ mode: 'commute', changed_seconds: 300, remaining_after: 0 }, 0); break
+        default:
+          body = winPayload(null, 0)
+      }
+      return new Response(JSON.stringify(body),
+        { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ code: 403, msg: 'harness: blocked' }), { status: 403 })
+  }
+
+  const app = createApp({ render: () => h(RpsGame, { onClose: () => { window.__closed = true } }) })
+  app.mount('#app')
+  window.__ready = true
+  log.push('harness v3 ready, preBan=' + preBan)
+}
+catch (e) {
+  window.__err = String((e && e.stack) || e)
+}
+</script>
+</body>
+</html>
