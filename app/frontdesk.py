@@ -92,25 +92,65 @@ def public_message(status: str, code: str) -> str:
     return ""
 
 
+def _skein_base() -> str:
+    return os.environ.get("SKEIN_CONTROL_URL", "http://172.17.0.1:7800").rstrip("/")
+
+
+async def _skein_post(
+    path: str, payload: dict, headers: dict, timeout: float
+) -> tuple[int, dict]:
+    """POST 到控制面，返回 (状态码, JSON 体)。网络失败记 (0, {})，回的不是 JSON 记 (码, {})。"""
+    try:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            response = await client.post(f"{_skein_base()}{path}", json=payload, headers=headers)
+    except httpx.HTTPError as exc:
+        log.warning("skein %s failed: %s", path, exc)
+        return 0, {}
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        log.warning("skein %s -> %s (non-JSON body)", path, response.status_code)
+        return response.status_code, {}
+    return response.status_code, data
+
+
+def _skein_rejected(path: str, status: int, data: dict) -> None:
+    """对外 API 的错误体是 {"detail": {"code": ...}}。只记它，不记请求头——里面是凭据。"""
+    log.warning("skein %s -> %s %s", path, status, data.get("detail"))
+
+
 async def _skein_call(path: str, payload: dict, timeout: float = 10.0) -> dict | None:
-    base = os.environ.get("SKEIN_CONTROL_URL", "http://172.17.0.1:7800").rstrip("/")
+    """调内部接口（模型调用留痕）。这一路仍然用共享令牌 ``SKEIN_TOKEN``。"""
     token = os.environ.get("SKEIN_TOKEN", "")
     if not token:
         return None
-    try:
-        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-            response = await client.post(
-                f"{base}{path}",
-                json=payload,
-                headers={"X-Skein-Token": token},
-            )
-        if response.status_code != 200:
-            log.warning("skein %s -> %s", path, response.status_code)
-            return None
-        return response.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        log.warning("skein %s failed: %s", path, exc)
+    status, data = await _skein_post(path, payload, {"X-Skein-Token": token}, timeout)
+    if status != 200:
+        _skein_rejected(path, status, data)
         return None
+    return data
+
+
+async def _skein_submit(payload: dict) -> dict | None:
+    """建单走对外 API ``POST /api/v1/tickets``，只带助手 key（``SKEIN_ASSISTANT_KEY``）。
+
+    助手 key 只能建单和查自己建的单，拿不到共享令牌的派单/审批/取消权限。
+    同一条内容重报是幂等的（200）；文本变了再报是 409，detail.existing 里仍是原工单。
+    """
+    key = os.environ.get("SKEIN_ASSISTANT_KEY", "")
+    if not key:
+        return None
+    status, data = await _skein_post(
+        "/api/v1/tickets", payload, {"Authorization": f"Bearer {key}"}, 10.0
+    )
+    if status in (200, 201):
+        return data
+    if status == 409:
+        return data.get("detail", {}).get("existing") or None
+    _skein_rejected("/api/v1/tickets", status, data)
+    return None
 
 
 async def _trace(
@@ -284,6 +324,45 @@ def _candidate(kind: str, text: str) -> bool:
     )
 
 
+# 建单时的 source 沿用旧的 origin 取值，见 _ticket_payload
+_TICKET_SOURCE = {
+    "post": "forum_post",
+    "comment": "forum_comment",
+    "ccomment": "forum_ccomment",
+}
+# Skein 只认这几档；模型给出别的（比如 medium）按 normal 报，别让整张单建不出来
+_SKEIN_SEVERITIES = ("low", "normal", "high", "critical")
+
+
+def _ticket_payload(item: dict, verdict: dict, kind_of: str) -> dict:
+    """论坛的一条内容 → Skein 通用建单字段。
+
+    source / external_id 刻意等于旧的 origin / origin_id：Skein 验收后回帖
+    （``/internal/skein/notify``）靠这两个值反查帖子与楼层，换了回帖就断了。
+    thread_id 是帖子号：同帖已有在途工单时，后续评论由 Skein 追加进去而不是另开一单。
+    """
+    kind, item_id, post_id = item["kind"], int(item["id"]), int(item["post_id"])
+    external_id = {
+        "post": str(post_id),
+        "comment": f"{post_id}:{item_id}",
+        "ccomment": f"{post_id}:{int(item['pcomment_id'])}:{item_id}",
+    }[kind]
+    severity = str(verdict.get("severity") or "normal")
+    from app.rag.unified import post_url  # 延迟导入：这里只需要拼帖子链接
+
+    return {
+        "title": _plain(verdict.get("title") or item["title"], 120),
+        "description": _plain(verdict.get("summary") or item["text"], 1000),
+        "source": _TICKET_SOURCE[kind],
+        "external_id": external_id,
+        "thread_id": str(post_id),
+        "requester": {"id": f"forum:{item['user_id']}"},
+        "severity": severity if severity in _SKEIN_SEVERITIES else "normal",
+        "category": kind_of,
+        "url": post_url(str(post_id)),
+    }
+
+
 
 
 async def handle(pool: Any, item: dict) -> None:
@@ -315,25 +394,7 @@ async def handle(pool: Any, item: dict) -> None:
         await _mark(pool, kind, item_id, "skipped")
         return
     if kind_of in ("bug", "request"):
-        source = {
-            "post": "forum_post",
-            "comment": "forum_comment",
-            "ccomment": "forum_ccomment",
-        }[kind]
-        payload = {
-            "source": source,
-            "thread_id": str(item["post_id"]),
-            "message_id": str(item_id),
-            "requester": f"forum:{item['user_id']}",
-            "title": _plain(verdict.get("title") or item["title"], 120),
-            "summary": _plain(verdict.get("summary") or item["text"], 1000),
-            "category": kind_of,
-            "severity": str(verdict.get("severity") or "normal"),
-            "visibility": "market",
-        }
-        if kind == "ccomment":
-            payload["parent_id"] = str(item["pcomment_id"])
-        ticket = await _skein_call("/internal/intake", payload)
+        ticket = await _skein_submit(_ticket_payload(item, verdict, kind_of))
         code = str((ticket or {}).get("code") or "")
         if code and code not in reply:
             reply = reply.rstrip() + f"（{code}）"
