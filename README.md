@@ -3,13 +3,13 @@
 > SSE Market 论坛的对话 Agent 与论坛前厅。ops 面已下线，运维由 Skein 控制台/Agent 接管。
 > 本仓库不再包含 ops 面板、主机巡检、告警、kill/审批等运维能力。
 >
-> 交接先读 [../skein/HANDOVER.md](../skein/HANDOVER.md)；生产镜像 `xiaoqiu:1.0.109-skein-frontdesk`，服务器构建源 `/root/xiaoqiu-build`。
+> 与雁阵的接口见 Skein 仓 `docs/assistants.md`；镜像 `xiaoqiu:<ver>-skein-frontdesk`（构建见 `docker/Dockerfile.skein-frontdesk`）。
 
 小秋现在只做两件事：
 
 1. **chat 面**：`/task/sse`，论坛/知识库助手——检索、统计、引用溯源、记忆、反馈。
-2. **论坛前厅**：`app/frontdesk.py` 轮询帖子/评论/楼中楼，所有吐槽都回；bug/需求通过
-   `intake` 建 Skein 工单，验收后通过 `notify` 在原帖回写公开状态。
+2. **论坛前厅**：`app/frontdesk.py` 轮询帖子/评论/楼中楼，所有吐槽都回；bug/需求用助手
+   凭证经雁阵的公共 API 建成工单，验收后雁阵用带签名的回调在原帖回写公开状态。
 
 ## 核心特性
 

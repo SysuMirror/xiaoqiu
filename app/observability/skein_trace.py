@@ -1,6 +1,7 @@
 """Skein 调用留痕回调：把每一次 LangChain 模型调用回报给控制面。
 
-直接上报 Skein；SKEIN_TOKEN 未配置时 trace_patch 不会挂这个 handler。
+走雁阵的公共 API（``POST /api/v1/llm/calls``），认证用助手凭证 ``SKEIN_ASSISTANT_KEY``；
+没配这个环境变量时 trace_patch 不会挂这个 handler，本地开发零开销。
 """
 
 from __future__ import annotations
@@ -75,13 +76,13 @@ class SkeinTraceCallback(AsyncCallbackHandler):
     def __init__(
         self,
         base_url: str,
-        token: str,
+        key: str,
         session_id: str = "",
         user_id: str = "",
         source: str = "chat",
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.token = token
+        self.key = key
         self.session_id = (session_id or "")[:128]
         self.user_id = (user_id or "")[:128]
         self.source = (source or "chat")[:32]
@@ -166,7 +167,6 @@ class SkeinTraceCallback(AsyncCallbackHandler):
         self._emit(
             {
                 "session_id": self.session_id,
-                "actor": self.user_id,
                 "source": self.source,
                 "model": model,
                 "prompt": prompt,
@@ -196,7 +196,6 @@ class SkeinTraceCallback(AsyncCallbackHandler):
         self._emit(
             {
                 "session_id": self.session_id,
-                "actor": self.user_id,
                 "source": self.source,
                 "model": model,
                 "prompt": prompt,
@@ -221,9 +220,9 @@ class SkeinTraceCallback(AsyncCallbackHandler):
         try:
             async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
                 await client.post(
-                    f"{self.base_url}/internal/llm/calls",
+                    f"{self.base_url}/api/v1/llm/calls",
                     json=payload,
-                    headers={"X-Skein-Token": self.token},
+                    headers={"Authorization": f"Bearer {self.key}"},
                 )
         except Exception as exc:  # noqa: BLE001 —— 留痕失败不影响对话
             log.debug("skein trace post failed: %s", exc)

@@ -130,9 +130,10 @@ auto_memory:                      # v3 自动记忆抽取（run 结束后后台 
 admin:                            # v3 admin 加固：非空 = 主站 admin token 的 uid 必须在白名单
   uid_allowlist: []
 
-skein:                    # 雁阵控制面指标（生产镜像由部署环境覆盖）
+skein:                    # 雁阵控制面：助手接入（生产镜像由部署环境覆盖）
   enabled: false
   base_url: http://172.17.0.1:7800
-  token_env: SKEIN_TOKEN
+  assistant_key_env: SKEIN_ASSISTANT_KEY
+  webhook_secret_env: SKEIN_WEBHOOK_SECRET
   scrape_seconds: 30
   prune_days: 3

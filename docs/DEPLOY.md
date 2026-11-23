@@ -66,18 +66,21 @@ agent 容器持有 docker 控制能力（经 SSH 或本机 docker.sock），约�
 ## 论坛前厅 monitor（Skein 闭环）
 
 小秋 chat 容器内可运行 `app/frontdesk.py`：轮询论坛新帖/新评论，所有吐槽都回，
-bug/需求调 Skein `/internal/intake` 建单；Skein 验收后调本服务
-`POST /internal/skein/notify`，由 `app/api/internal.py` 以 `XQ_BOT_UID` 身份回原帖。
+bug/需求用助手凭证调雁阵的公共 API（`POST /api/v1/tickets`）建单；雁阵验收后用带签名的
+回调调本服务 `POST /internal/skein/notify`，由 `app/api/internal.py` 以 `XQ_BOT_UID`
+身份回原帖。
 
 - 开关：`FRONTDESK_ENABLED=1`；间隔/回看/限频：`FRONTDESK_INTERVAL`（60）、
   `FRONTDESK_LOOKBACK`（600）、`FRONTDESK_MAX_PER_HOUR`（12）。
 - 分类模型：`FRONTDESK_MODEL` + `FRONTDESK_LLM_BASE`（当前 DeepSeek）。
-- 一级评论和楼中楼（ccomments）都监测；评论一律交给 LLM 判断。同帖已有活跃工单时，
-  由 Skein `intake` 自动合并为 followup，不重复建单。
+- 一级评论和楼中楼（ccomments）都监测；评论一律交给 LLM 判断。同帖已有在途工单时，
+  小秋不再重复建单（按帖去重，reply 里带原工单编号）。
 - 楼中楼回执带 `reply_ccomment_id`，用 `ReplyCcommentID` 嵌套在原回复下。
-- Skein：`SKEIN_CONTROL_URL` + `SKEIN_TOKEN`；主站：`GO_INTERNAL_URL` + `INTERNAL_TOKEN`；
-  机器人账号：`XQ_BOT_UID`。
+- 雁阵（助手接入）：`SKEIN_CONTROL_URL` + `SKEIN_ASSISTANT_KEY`（助手凭证：只能建单、
+  查自己的单、上报模型调用留痕）+ `SKEIN_WEBHOOK_SECRET`（校验雁阵的状态回调）；
+  **不再持有雁阵的主令牌**。主站：`GO_INTERNAL_URL` + `INTERNAL_TOKEN`；机器人账号：
+  `XQ_BOT_UID`。
 - 镜像：`docker/Dockerfile.skein-frontdesk`（直接用当前仓库 `app/` 覆盖基础镜像，并移除旧 ops 代码）。
 - 测试：`pytest tests/test_frontdesk.py`。
 
-完整接口契约见 Skein 仓 `docs/chat-events.md`。
+完整接口契约见 Skein 仓 `docs/assistants.md`。

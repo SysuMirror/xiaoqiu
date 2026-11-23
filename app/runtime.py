@@ -44,22 +44,22 @@ def cancel_thread_run(thread_id: str) -> str | None:
     producer.cancel()
     return run_id
 
-# Skein 调用留痕：SKEIN_TOKEN 未设时零开销（本地开发不回报）
+# Skein 调用留痕：SKEIN_ASSISTANT_KEY 未设时零开销（本地开发不回报）
 def trace_patch(config: dict, thread_id: str, tags: list[str] | None = None) -> dict:
     """给 LangGraph 调用 config 挂 Skein 留痕回调。
 
     - 会话：thread_id；用户：configurable.user_id；来源：tags[0]（ops/chat）
-    - SKEIN_TOKEN 未设时原样返回（本地开发零开销）
+    - SKEIN_ASSISTANT_KEY 未设时原样返回（本地开发零开销）
     """
-    token = os.environ.get("SKEIN_TOKEN", "")
-    if not token:
+    key = os.environ.get("SKEIN_ASSISTANT_KEY", "")
+    if not key:
         return config
     base = os.environ.get("SKEIN_CONTROL_URL", "http://172.17.0.1:7800")
     from app.observability.skein_trace import SkeinTraceCallback
 
     user_id = (config.get("configurable") or {}).get("user_id")
     source = tags[0] if tags else "chat"
-    handler = SkeinTraceCallback(base, token, thread_id, str(user_id or ""), source)
+    handler = SkeinTraceCallback(base, key, thread_id, str(user_id or ""), source)
     config.setdefault("callbacks", [])
     if isinstance(config["callbacks"], list):
         config["callbacks"].append(handler)

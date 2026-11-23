@@ -8,11 +8,13 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 
 from fastapi import APIRouter, Request
 
+from app.common import skein_signature
 from app.rag import store
 from app.tools.forum.sql_templates import _query, init_forum_pool
 
@@ -27,11 +29,18 @@ def _check_token(request: Request) -> bool:
     return request.headers.get("X-Internal-Token", "") == expected
 
 
-def _check_skein(request: Request) -> bool:
-    expected = os.environ.get("SKEIN_TOKEN", "")
-    if not expected:
-        return False
-    return request.headers.get("X-Skein-Token", "") == expected
+def _check_skein(request: Request, body: bytes) -> bool:
+    """雁阵的状态回调：验证 X-Skein-Webhook-Signature（密钥 SKEIN_WEBHOOK_SECRET）。
+
+    这样小秋不需要持有雁阵的任何令牌——回调的信任来自双方共享的一把签名密钥。
+    """
+    secret = os.environ.get("SKEIN_WEBHOOK_SECRET", "")
+    return skein_signature.verify(
+        body,
+        request.headers.get("X-Skein-Webhook-Timestamp"),
+        request.headers.get("X-Skein-Webhook-Signature"),
+        secret,
+    )
 
 
 def _forbidden():
@@ -72,14 +81,24 @@ async def _fetch_comment(comment_id: int) -> dict | None:
 
 @router.post("/internal/skein/notify")
 async def skein_notify(request: Request):
-    """Skein 工单状态 → 小秋在前厅原帖回写公开进度。"""
-    if not _check_skein(request):
+    """Skein 工单状态 → 小秋在前厅原帖回写公开进度。
+
+    请求体是雁阵的 ``ticket.status`` 事件：
+    ``{"event": "ticket.status", "ticket": {code, public_status, source, external_id, …}}``
+    """
+    raw = await request.body()
+    if not _check_skein(request, raw):
         return _forbidden()
     from app.frontdesk import post_reply, public_message
 
-    body = await request.json()
-    origin = str(body.get("origin") or "")
-    origin_id = str(body.get("origin_id") or "")
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return {"ok": True, "skipped": True}
+    ticket = body.get("ticket") if isinstance(body, dict) else None
+    ticket = ticket if isinstance(ticket, dict) else {}
+    origin = str(ticket.get("source") or "")
+    origin_id = str(ticket.get("external_id") or "")
     reply_ccomment_id = 0
     if origin == "forum_post":
         try:
@@ -101,7 +120,9 @@ async def skein_notify(request: Request):
             return {"ok": True, "skipped": True}
     else:
         return {"ok": True, "skipped": True}
-    text = public_message(str(body.get("public_status") or ""), str(body.get("code") or ""))
+    text = public_message(
+        str(ticket.get("public_status") or ""), str(ticket.get("code") or "")
+    )
     if not text:
         return {"ok": True, "skipped": True}
     ok = await post_reply(post_id, pcomment_id, text, reply_ccomment_id)
